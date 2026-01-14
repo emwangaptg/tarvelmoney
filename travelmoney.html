@@ -3,11 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>綺麗旅帳 - Travel Expense V5.5 (模型路徑修復版)</title>
+    <title>綺麗旅帳 - Travel Expense V5.7 (離線OCR整合版)</title>
     
     <!-- 核心函式庫 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Tesseract.js for OCR -->
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Zen+Maru+Gothic:wght@400;700&display=swap" rel="stylesheet">
 
@@ -53,25 +56,16 @@
         .tag-exc { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
         .receipt-thumb { width: 60px; height: 60px; border-radius: 12px; object-fit: cover; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         
-        /* Loading Animation */
-        .loader {
-            width: 24px; height: 24px; border: 3px solid #fecdd3; border-bottom-color: #f43f5e;
-            border-radius: 50%; display: inline-block; animation: rotation 1s linear infinite;
-        }
+        .loader { width: 24px; height: 24px; border: 3px solid #fecdd3; border-bottom-color: #f43f5e; border-radius: 50%; display: inline-block; animation: rotation 1s linear infinite; }
         @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        /* Transitions */
         .modal-enter-active, .modal-leave-active { transition: opacity 0.3s ease; }
         .modal-enter-from, .modal-leave-to { opacity: 0; }
         .slide-up-enter-active, .slide-up-leave-active { transition: transform 0.3s ease; }
         .slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); }
 
-        .progress-bar {
-            width: 100%; height: 6px; background-color: #e5e7eb; border-radius: 99px; overflow: hidden; margin-top: 8px;
-        }
-        .progress-fill {
-            height: 100%; background-color: #db2777; transition: width 0.3s ease;
-        }
+        .progress-bar { width: 100%; height: 6px; background-color: #e5e7eb; border-radius: 99px; overflow: hidden; margin-top: 8px; }
+        .progress-fill { height: 100%; background-color: #db2777; transition: width 0.3s ease; }
     </style>
 </head>
 <body>
@@ -92,8 +86,6 @@
 
     <!-- Main Content -->
     <main class="flex-1 overflow-y-auto px-4 pb-24 scroll-smooth">
-        
-        <!-- Rate Info -->
         <div class="card p-4 mb-6 flex justify-between items-center bg-gradient-to-r from-rose-50 to-pink-50 border-rose-100">
             <div>
                 <p class="text-xs text-rose-400 mb-1">當前匯率</p>
@@ -109,7 +101,6 @@
             </div>
         </div>
 
-        <!-- Expense List -->
         <div v-if="Object.keys(groupedExpenses).length === 0" class="text-center py-20 opacity-50">
             <i class="fa-solid fa-bag-shopping text-6xl text-rose-200 mb-4"></i>
             <p>還沒有敗家紀錄<br>快去記帳吧！</p>
@@ -125,22 +116,15 @@
 
             <div class="space-y-3">
                 <div v-for="item in dayExpenses" :key="item.id" class="card p-3 flex gap-3 items-center relative overflow-hidden group">
-                    <button @click="deleteExpense(item.id)" class="absolute right-0 top-0 bottom-0 w-12 bg-red-500 text-white translate-x-full group-hover:translate-x-0 transition-transform flex items-center justify-center">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
-                    <div class="shrink-0 cursor-pointer" @click="viewImage(item.image)">
-                        <img :src="item.image || 'https://via.placeholder.com/150?text=No+Img'" class="receipt-thumb" alt="receipt">
-                    </div>
+                    <button @click="deleteExpense(item.id)" class="absolute right-0 top-0 bottom-0 w-12 bg-red-500 text-white translate-x-full group-hover:translate-x-0 transition-transform flex items-center justify-center"><i class="fa-solid fa-trash"></i></button>
+                    <div class="shrink-0 cursor-pointer" @click="viewImage(item.image)"><img :src="item.image || 'https://via.placeholder.com/150?text=No+Img'" class="receipt-thumb" alt="receipt"></div>
                     <div class="flex-1 min-w-0">
                         <div class="flex justify-between items-start mb-0.5">
                             <h3 class="font-bold text-slate-800 truncate text-base">{{ item.itemTw }}</h3>
                             <span class="text-sm font-bold text-rose-500">NT$ {{ formatCurrency(Math.round(item.price * settings.rate)) }}</span>
                         </div>
                         <div class="flex justify-between items-center text-xs text-gray-500">
-                            <div class="flex items-center gap-2">
-                                <span class="truncate max-w-[80px]"><i class="fa-solid fa-store mr-1 text-rose-300"></i>{{ item.store }}</span>
-                                <span class="bg-gray-100 px-1.5 py-0.5 rounded text-[10px]">{{ item.itemOriginal }}</span>
-                            </div>
+                            <div class="flex items-center gap-2"><span class="truncate max-w-[80px]"><i class="fa-solid fa-store mr-1 text-rose-300"></i>{{ item.store }}</span><span class="bg-gray-100 px-1.5 py-0.5 rounded text-[10px]">{{ item.itemOriginal }}</span></div>
                             <span class="font-mono">{{ formatCurrency(item.price) }} {{ currencyCode }}</span>
                         </div>
                     </div>
@@ -163,50 +147,30 @@
                     <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
                     <h2 class="text-xl font-bold text-slate-800 mb-4 text-center">紀錄美好消費</h2>
 
-                    <!-- Image Preview / Upload Area -->
-                    <div class="mb-4 relative group" v-if="isAIProvider">
-                         <div v-if="!form.image" class="w-full h-40 bg-rose-50 rounded-2xl border-2 border-dashed border-rose-200 flex flex-col items-center justify-center text-rose-300 cursor-pointer hover:bg-rose-100 transition" @click="triggerCamera">
-                            <div class="flex gap-4 text-3xl mb-2">
-                                <i class="fa-solid fa-camera"></i>
-                                <i class="fa-regular fa-image"></i>
-                            </div>
+                    <!-- Image Preview Area -->
+                    <div class="mb-4 relative group">
+                        <div v-if="!form.image" class="w-full h-40 bg-rose-50 rounded-2xl border-2 border-dashed border-rose-200 flex flex-col items-center justify-center text-rose-300 cursor-pointer hover:bg-rose-100 transition" @click="triggerCamera">
+                            <div class="flex gap-4 text-3xl mb-2"><i class="fa-solid fa-camera"></i><i class="fa-regular fa-image"></i></div>
                             <span class="text-sm font-bold">拍照 或 從相簿上傳</span>
                             <span class="text-xs text-rose-300 mt-1">(支援 {{ getProviderName() }} 自動辨識)</span>
                         </div>
                         <div v-else class="relative w-full h-48 rounded-2xl overflow-hidden shadow-sm bg-black/5">
                             <img :src="form.image" class="w-full h-full object-contain">
-                            <button @click="triggerCamera" class="absolute bottom-2 right-2 bg-white/80 p-2 rounded-full text-gray-600 text-sm font-bold shadow hover:bg-white z-10">
-                                <i class="fa-solid fa-rotate mr-1"></i> 重選
-                            </button>
+                            <button @click="triggerCamera" class="absolute bottom-2 right-2 bg-white/80 p-2 rounded-full text-gray-600 text-sm font-bold shadow hover:bg-white z-10"><i class="fa-solid fa-rotate mr-1"></i> 重選</button>
                              <!-- Analyzing Overlay -->
                             <div v-if="isAnalyzing" class="absolute inset-0 bg-white/80 z-20 flex flex-col items-center justify-center backdrop-blur-sm text-center px-4">
                                 <span class="loader mb-3"></span>
-                                <span class="text-rose-500 font-bold text-base mb-1">{{ getProviderName() }} 正在讀取收據...</span>
-                                <span class="text-xs text-gray-500 block">{{ statusText }}</span>
+                                <span class="text-rose-500 font-bold text-base mb-1">{{ isOfflineOCR ? '離線 OCR 分析中...' : (getProviderName() + ' 正在讀取收據...') }}</span>
+                                <span class="text-xs text-gray-500 block whitespace-pre-wrap">{{ statusText }}</span>
                             </div>
                         </div>
                         <input type="file" ref="fileInput" accept="image/*" class="hidden" @change="handleImageUpload">
                     </div>
 
-                     <!-- Manual / Dictionary Mode Image Upload -->
-                    <div class="mb-4 relative group" v-else>
-                         <div v-if="!form.image" class="w-full h-20 bg-gray-50 rounded-xl border border-dashed border-gray-300 flex items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-100 transition" @click="triggerCamera">
-                            <i class="fa-solid fa-camera mr-2"></i>
-                            <span class="text-sm">拍照存證 (僅儲存圖片)</span>
-                        </div>
-                        <div v-else class="relative w-full h-48 rounded-2xl overflow-hidden shadow-sm bg-black/5">
-                             <img :src="form.image" class="w-full h-full object-contain">
-                            <button @click="triggerCamera" class="absolute bottom-2 right-2 bg-white/80 p-2 rounded-full text-gray-600 text-sm font-bold shadow hover:bg-white z-10">
-                                <i class="fa-solid fa-rotate mr-1"></i> 重選
-                            </button>
-                        </div>
-                         <input type="file" ref="fileInput" accept="image/*" class="hidden" @change="handleImageUpload">
-                    </div>
-
-                    <!-- AI Retry Button (Only for AI providers) -->
-                    <button v-if="isAIProvider && form.image && !isAnalyzing" @click="analyzeReceipt" class="w-full mb-4 py-2 bg-gradient-to-r from-violet-50 to-fuchsia-50 text-violet-600 rounded-xl text-xs font-bold border border-violet-100 hover:brightness-95 transition flex items-center justify-center gap-2">
+                    <!-- AI/OCR Retry Button -->
+                    <button v-if="form.image && !isAnalyzing" @click="analyzeReceipt" class="w-full mb-4 py-2 bg-gradient-to-r from-violet-50 to-fuchsia-50 text-violet-600 rounded-xl text-xs font-bold border border-violet-100 hover:brightness-95 transition flex items-center justify-center gap-2">
                         <i class="fa-solid fa-wand-magic-sparkles"></i> 
-                        {{ isKeyConfigured ? '重新執行 AI 辨識' : '請先設定 API Key' }}
+                        {{ isOfflineOCR ? '執行離線 OCR 辨識' : (isKeyConfigured ? '重新執行 AI 辨識' : '請先設定 API Key') }}
                     </button>
 
                     <!-- Form Fields -->
@@ -221,13 +185,9 @@
                             <label class="text-xs font-bold text-gray-500 mb-1 block">原文品名 (選填)</label>
                             <div class="flex gap-2">
                                 <input type="text" v-model="form.itemOriginal" class="input-elegant text-sm text-gray-500 flex-1" placeholder="輸入原文自動翻譯">
-                                <button v-if="!isAIProvider" @click="translateItem" class="bg-blue-50 text-blue-600 px-3 rounded-xl border border-blue-100 hover:bg-blue-100 transition whitespace-nowrap text-sm font-bold">
-                                    <i class="fa-solid fa-language mr-1"></i>翻譯
-                                </button>
+                                <button v-if="!isAIProvider" @click="translateItem" class="bg-blue-50 text-blue-600 px-3 rounded-xl border border-blue-100 hover:bg-blue-100 transition whitespace-nowrap text-sm font-bold"><i class="fa-solid fa-language mr-1"></i>翻譯</button>
                             </div>
-                            <div v-if="isDownloadingModel" class="mt-2 text-xs text-violet-600 bg-violet-50 p-2 rounded animate-pulse">
-                                正在自動下載/載入離線翻譯模型... 請稍候 (約 1-2 分鐘)。
-                            </div>
+                            <div v-if="isDownloadingModel" class="mt-2 text-xs text-violet-600 bg-violet-50 p-2 rounded animate-pulse">正在自動下載/載入離線翻譯模型... 請稍候 (約 1-2 分鐘)。</div>
                         </div>
 
                         <div>
@@ -267,99 +227,71 @@
             <h3 class="text-lg font-bold text-slate-800 mb-4 text-center">旅程設定</h3>
             <div class="space-y-5">
                 
-                <!-- Provider Selection -->
                 <div>
                     <label class="text-xs font-bold text-gray-500 mb-2 block">辨識/翻譯方式</label>
                     <div class="grid grid-cols-2 gap-2 bg-slate-50 p-1 rounded-xl">
                         <button @click="settings.provider = 'gemini'" :class="['tab-btn', settings.provider === 'gemini' ? 'active' : 'inactive']">Gemini</button>
                         <button @click="settings.provider = 'openai'" :class="['tab-btn', settings.provider === 'openai' ? 'active' : 'inactive']">ChatGPT</button>
                         <button @click="settings.provider = 'dictionary'" :class="['tab-btn', settings.provider === 'dictionary' ? 'active' : 'inactive']">簡易字典</button>
-                        <button @click="settings.provider = 'offline_ai'" :class="['tab-btn', settings.provider === 'offline_ai' ? 'active' : 'inactive']">離線 AI</button>
+                        <button @click="settings.provider = 'offline_ai'" :class="['tab-btn', settings.provider === 'offline_ai' ? 'active' : 'inactive']">離線 AI+OCR</button>
                         <div class="col-span-2 flex justify-center mt-1">
                              <button @click="settings.provider = 'google_trans'" :class="['tab-btn', settings.provider === 'google_trans' ? 'active' : 'inactive', 'w-1/2']">Google 翻譯</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Provider Details -->
                 <div v-if="settings.provider === 'gemini'" class="bg-rose-50 p-3 rounded-xl border border-rose-100 animate-fade-in">
                     <label class="text-xs font-bold text-rose-600 mb-1 block"><i class="fa-solid fa-key mr-1"></i>Gemini API Key</label>
                     <input type="password" v-model="settings.geminiKey" placeholder="AIza..." class="input-elegant text-sm">
-                    
                     <label class="text-xs font-bold text-gray-500 mt-3 mb-1 block">模型</label>
                     <select v-model="settings.geminiModel" class="input-elegant bg-white text-xs">
                         <option value="gemini-1.5-flash">Gemini 1.5 Flash (快速/推薦)</option>
                         <option value="gemini-1.5-pro-latest">Gemini 1.5 Pro (精準)</option>
                          <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (最新實驗版)</option>
                     </select>
-                    
                     <div class="flex justify-between items-center mt-2">
                         <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-[10px] text-rose-400 underline">免費申請 Key</a>
-                        <button @click="testAPIConnection" class="text-[10px] bg-white border border-rose-200 text-rose-500 px-2 py-1 rounded hover:bg-rose-50" :disabled="isTesting">
-                            {{ isTesting ? '測試中...' : '測試連線' }}
-                        </button>
+                        <button @click="testAPIConnection" class="text-[10px] bg-white border border-rose-200 text-rose-500 px-2 py-1 rounded hover:bg-rose-50" :disabled="isTesting">{{ isTesting ? '測試中...' : '測試連線' }}</button>
                     </div>
                 </div>
 
                 <div v-if="settings.provider === 'openai'" class="bg-blue-50 p-3 rounded-xl border border-blue-100 animate-fade-in">
                     <label class="text-xs font-bold text-blue-600 mb-1 block"><i class="fa-solid fa-key mr-1"></i>OpenAI API Key</label>
                     <input type="password" v-model="settings.openaiKey" placeholder="sk-..." class="input-elegant text-sm">
-                    
                     <label class="text-xs font-bold text-gray-500 mt-3 mb-1 block">模型</label>
                     <select v-model="settings.openaiModel" class="input-elegant bg-white text-xs">
                         <option value="gpt-4o">GPT-4o (推薦)</option>
                         <option value="gpt-4o-mini">GPT-4o Mini (省錢)</option>
                     </select>
-
                     <div class="flex justify-between items-center mt-2">
                         <a href="https://platform.openai.com/api-keys" target="_blank" class="text-[10px] text-blue-500 underline">申請 OpenAI Key</a>
-                        <button @click="testAPIConnection" class="text-[10px] bg-white border border-blue-200 text-blue-500 px-2 py-1 rounded hover:bg-blue-50" :disabled="isTesting">
-                            {{ isTesting ? '測試中...' : '測試連線' }}
-                        </button>
+                        <button @click="testAPIConnection" class="text-[10px] bg-white border border-blue-200 text-blue-500 px-2 py-1 rounded hover:bg-blue-50" :disabled="isTesting">{{ isTesting ? '測試中...' : '測試連線' }}</button>
                     </div>
                 </div>
                 
                 <div v-if="settings.provider === 'offline_ai'" class="bg-violet-50 p-3 rounded-xl border border-violet-100 animate-fade-in text-xs text-violet-700">
-                    <p class="font-bold mb-2"><i class="fa-solid fa-download mr-1"></i> 輕量化離線翻譯 (Opus-MT)</p>
-                    <p class="mb-3">請依需求下載對應的語言模組 (每個約 40~60MB)。</p>
-                    
+                    <p class="font-bold mb-2"><i class="fa-solid fa-robot mr-1"></i> 離線 AI (OCR + 翻譯)</p>
+                    <p class="mb-3">請依需求下載對應的語言模組。首次使用需等待下載。</p>
                     <div class="space-y-2">
-                        <button @click="downloadModel('ja')" class="w-full flex justify-between items-center px-3 py-2 bg-white rounded-lg border border-violet-200 hover:bg-violet-50 transition" :disabled="isDownloadingModel">
-                            <span>🇯🇵 日文 -> 中文 (NLLB)</span>
-                            <span class="text-violet-500 font-bold">{{ isDownloadingModel && currentDownloadTarget === 'ja' ? '下載中...' : '📥 下載' }}</span>
+                        <button @click="downloadModel('ja')" :class="['w-full flex justify-between items-center px-3 py-2 rounded-lg border transition', downloadedModels.includes('ja') ? 'bg-green-50 border-green-200' : 'bg-white border-violet-200 hover:bg-violet-50']" :disabled="isDownloadingModel">
+                            <span>🇯🇵 日文 -> 中文</span><span :class="downloadedModels.includes('ja') ? 'text-green-600 font-bold' : 'text-violet-500 font-bold'">{{ downloadedModels.includes('ja') ? '✅ 已下載' : (isDownloadingModel && currentDownloadTarget === 'ja' ? '下載中...' : '📥 下載') }}</span>
                         </button>
-                        <button @click="downloadModel('ko')" class="w-full flex justify-between items-center px-3 py-2 bg-white rounded-lg border border-violet-200 hover:bg-violet-50 transition" :disabled="isDownloadingModel">
-                            <span>🇰🇷 韓文 -> 中文 (NLLB)</span>
-                            <span class="text-violet-500 font-bold">{{ isDownloadingModel && currentDownloadTarget === 'ko' ? '下載中...' : '📥 下載' }}</span>
+                        <button @click="downloadModel('ko')" :class="['w-full flex justify-between items-center px-3 py-2 rounded-lg border transition', downloadedModels.includes('ko') ? 'bg-green-50 border-green-200' : 'bg-white border-violet-200 hover:bg-violet-50']" :disabled="isDownloadingModel">
+                            <span>🇰🇷 韓文 -> 中文</span><span :class="downloadedModels.includes('ko') ? 'text-green-600 font-bold' : 'text-violet-500 font-bold'">{{ downloadedModels.includes('ko') ? '✅ 已下載' : (isDownloadingModel && currentDownloadTarget === 'ko' ? '下載中...' : '📥 下載') }}</span>
                         </button>
-                        <button @click="downloadModel('en')" class="w-full flex justify-between items-center px-3 py-2 bg-white rounded-lg border border-violet-200 hover:bg-violet-50 transition" :disabled="isDownloadingModel">
-                            <span>🇺🇸 英文 -> 中文 (Opus-MT)</span>
-                            <span class="text-violet-500 font-bold">{{ isDownloadingModel && currentDownloadTarget === 'en' ? '下載中...' : '📥 下載' }}</span>
+                        <button @click="downloadModel('en')" :class="['w-full flex justify-between items-center px-3 py-2 rounded-lg border transition', downloadedModels.includes('en') ? 'bg-green-50 border-green-200' : 'bg-white border-violet-200 hover:bg-violet-50']" :disabled="isDownloadingModel">
+                            <span>🇺🇸 英文 -> 中文</span><span :class="downloadedModels.includes('en') ? 'text-green-600 font-bold' : 'text-violet-500 font-bold'">{{ downloadedModels.includes('en') ? '✅ 已下載' : (isDownloadingModel && currentDownloadTarget === 'en' ? '下載中...' : '📥 下載') }}</span>
                         </button>
                     </div>
-
-                     <button @click="resetDownloadState" class="w-full mt-3 px-3 py-2 bg-white border border-red-200 text-red-500 rounded-lg font-bold hover:bg-red-50 text-center" title="若卡住請按此重置">
-                        <i class="fa-solid fa-rotate-right mr-1"></i> 重置下載狀態
-                    </button>
-                    
-                    <!-- Progress Bar in Settings -->
+                     <button @click="resetDownloadState" class="w-full mt-3 px-3 py-2 bg-white border border-red-200 text-red-500 rounded-lg font-bold hover:bg-red-50 text-center"><i class="fa-solid fa-rotate-right mr-1"></i> 重置下載狀態</button>
                     <div v-if="modelLoading.total > 0" class="mt-3">
-                         <div class="flex justify-between text-xs text-violet-600 mb-1">
-                            <span>{{ modelLoading.text }}</span>
-                            <span>{{ Math.round((modelLoading.loaded / modelLoading.total) * 100) }}%</span>
-                        </div>
+                         <div class="flex justify-between text-xs text-violet-600 mb-1"><span>{{ modelLoading.text }}</span><span>{{ Math.round((modelLoading.loaded / modelLoading.total) * 100) }}%</span></div>
                         <div class="progress-bar"><div class="progress-fill" :style="{ width: (modelLoading.loaded / modelLoading.total * 100) + '%' }"></div></div>
                     </div>
                 </div>
 
                 <div class="h-[1px] bg-gray-100 my-2"></div>
-
-                <div>
-                    <label class="text-xs font-bold text-gray-500 mb-1 block">當地貨幣</label>
-                    <select v-model="settings.currencyCode" class="input-elegant bg-white">
-                        <option value="JPY">JPY (日圓)</option><option value="KRW">KRW (韓元)</option><option value="USD">USD (美金)</option><option value="EUR">EUR (歐元)</option><option value="THB">THB (泰銖)</option><option value="CNY">CNY (人民幣)</option>
-                    </select>
-                </div>
+                <div><label class="text-xs font-bold text-gray-500 mb-1 block">當地貨幣</label><select v-model="settings.currencyCode" class="input-elegant bg-white"><option value="JPY">JPY (日圓)</option><option value="KRW">KRW (韓元)</option><option value="USD">USD (美金)</option><option value="EUR">EUR (歐元)</option><option value="THB">THB (泰銖)</option><option value="CNY">CNY (人民幣)</option></select></div>
                 <div><label class="text-xs font-bold text-gray-500 mb-1 block">匯率 (1 當地幣 = ? 台幣)</label><input type="number" v-model.number="settings.rate" step="0.0001" class="input-elegant font-bold text-rose-500"></div>
             </div>
             <button @click="saveSettings" class="w-full mt-6 py-3 rounded-xl btn-pink font-bold">儲存設定</button>
@@ -369,80 +301,44 @@
     <!-- Error Modal -->
     <div v-if="errorModal.show" class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-6">
         <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-bounce-in">
-            <div class="text-center mb-4">
-                <i class="fa-solid fa-triangle-exclamation text-4xl text-amber-400 mb-2"></i>
-                <h3 class="text-lg font-bold text-slate-800">哎呀！出錯了</h3>
-            </div>
-            <div class="bg-gray-100 p-3 rounded-lg text-xs font-mono text-gray-600 mb-4 break-words max-h-32 overflow-y-auto">
-                {{ errorModal.message }}
-            </div>
+            <div class="text-center mb-4"><i class="fa-solid fa-triangle-exclamation text-4xl text-amber-400 mb-2"></i><h3 class="text-lg font-bold text-slate-800">哎呀！出錯了</h3></div>
+            <div class="bg-gray-100 p-3 rounded-lg text-xs font-mono text-gray-600 mb-4 break-words max-h-32 overflow-y-auto">{{ errorModal.message }}</div>
             <button @click="errorModal.show = false" class="w-full py-2 rounded-xl bg-slate-100 text-slate-600 font-bold">關閉</button>
         </div>
     </div>
-    
-    <!-- Image Viewer -->
-    <div v-if="viewingImage" class="fixed inset-0 bg-black/90 z-[60] flex flex-col justify-center items-center p-4" @click="viewingImage = null">
-        <img :src="viewingImage" class="max-w-full max-h-[80vh] object-contain rounded-lg">
-        <p class="text-white/70 text-sm mt-4">點擊任意處關閉</p>
-    </div>
-
+    <div v-if="viewingImage" class="fixed inset-0 bg-black/90 z-[60] flex flex-col justify-center items-center p-4" @click="viewingImage = null"><img :src="viewingImage" class="max-w-full max-h-[80vh] object-contain rounded-lg"><p class="text-white/70 text-sm mt-4">點擊任意處關閉</p></div>
 </div>
 
-<!-- Transformers.js script import -->
+<!-- Transformers.js & Tesseract.js script import -->
 <script type="module">
     import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.14.0';
-
-    // Disable local model checking since we use CDN
     env.allowLocalModels = false;
 
-    // Singleton for translation pipeline
     class TranslationService {
-        static instances = {}; // Store by lang: 'ja', 'ko', 'en'
-        static types = {}; // Store model type 'nllb' or 'opus'
+        static instances = {};
+        static types = {}; 
 
         static async getInstance(lang, progressCallback) {
             if (!this.instances[lang]) {
                 let modelID;
                 if (lang === 'ja' || lang === 'ko') {
-                    // Use NLLB for Asian languages (more reliable)
                     modelID = 'Xenova/nllb-200-distilled-600M';
                     this.types[lang] = 'nllb';
                 } else {
-                    // Use Opus for English
                     modelID = 'Xenova/opus-mt-en-zh';
                     this.types[lang] = 'opus';
                 }
-
-                this.instances[lang] = await pipeline('translation', modelID, {
-                    progress_callback: progressCallback
-                });
+                this.instances[lang] = await pipeline('translation', modelID, { progress_callback: progressCallback });
             }
-            return {
-                translator: this.instances[lang],
-                type: this.types[lang]
-            };
+            return { translator: this.instances[lang], type: this.types[lang] };
         }
     }
-
     window.TranslationService = TranslationService;
 </script>
 
 <script>
     const { createApp, ref, reactive, computed, onMounted } = Vue;
-    
-    const DICTIONARY = {
-        '水': 'Water', 'water': '水', 'みず': '水', '물': '水',
-        '牛奶': 'Milk', 'milk': '牛奶', '牛乳': '牛奶', '우유': '牛奶',
-        '咖啡': 'Coffee', 'coffee': '咖啡', 'コーヒー': '咖啡', '커피': '咖啡',
-        '茶': 'Tea', 'tea': '茶', 'お茶': '茶', '차': '茶',
-        '便當': 'Bento', 'bento': '便當', '弁当': '便當', '도시락': '便當',
-        '麵包': 'Bread', 'bread': '麵包', 'パン': '麵包', '빵': '麵包',
-        '藥妝': 'Drugstore', 'drug': '藥妝', '薬': '藥妝', '약': '藥妝',
-        '門票': 'Ticket', 'ticket': '門票', 'チケット': '門票', '티켓': '門票',
-        '交通': 'Transport', 'transport': '交通', '交通費': '交通', '교통': '交通',
-        '住宿': 'Hotel', 'hotel': '住宿', 'ホテル': '住宿', '호텔': '住宿',
-        '禮物': 'Gift', 'gift': '禮物', 'お土産': '伴手禮', '선물': '禮物'
-    };
+    const DICTIONARY = {'水': 'Water', 'water': '水', 'みず': '水', '물': '水', '牛奶': 'Milk', 'milk': '牛奶', '牛乳': '牛奶', '우유': '牛奶', '咖啡': 'Coffee', 'coffee': '咖啡', 'コーヒー': '咖啡', '커피': '咖啡', '茶': 'Tea', 'tea': '茶', 'お茶': '茶', '차': '茶', '便當': 'Bento', 'bento': '便當', '弁当': '便當', '도시락': '便當', '麵包': 'Bread', 'bread': '麵包', 'パン': '麵包', '빵': '麵包', '藥妝': 'Drugstore', 'drug': '藥妝', '薬': '藥妝', '약': '藥妝', '門票': 'Ticket', 'ticket': '門票', 'チケット': '門票', '티켓': '門票', '交通': 'Transport', 'transport': '交通', '交通費': '交通', '교통': '交通', '住宿': 'Hotel', 'hotel': '住宿', 'ホテル': '住宿', '호텔': '住宿', '禮物': 'Gift', 'gift': '禮物', 'お土産': '伴手禮', '선물': '禮物'};
 
     createApp({
         setup() {
@@ -455,7 +351,7 @@
             const isDownloadingModel = ref(false);
             const currentDownloadTarget = ref('');
             const statusText = ref('');
-            
+            const downloadedModels = ref([]);
             const modelLoading = reactive({ loaded: 0, total: 0, text: '' });
             const errorModal = reactive({ show: false, message: '' });
 
@@ -475,12 +371,14 @@
             onMounted(() => {
                 const savedExp = localStorage.getItem('myTravel_expenses');
                 const savedSet = localStorage.getItem('myTravel_settings');
+                const savedModels = localStorage.getItem('myTravel_downloaded_models');
                 if (savedExp) expenses.value = JSON.parse(savedExp);
                 if (savedSet) {
                     const parsed = JSON.parse(savedSet);
                     if (parsed.apiKey && !parsed.geminiKey) parsed.geminiKey = parsed.apiKey;
                     Object.assign(settings, parsed);
                 }
+                if (savedModels) downloadedModels.value = JSON.parse(savedModels);
                 resetForm();
             });
 
@@ -509,11 +407,13 @@
                 if (settings.provider === 'openai') return !!settings.openaiKey;
                 return true; 
             });
-            
             const isAIProvider = computed(() => ['gemini', 'openai'].includes(settings.provider));
+            const isOfflineOCR = computed(() => settings.provider === 'offline_ai');
+            
             const getProviderName = () => {
                  if(settings.provider === 'gemini') return 'Gemini';
                  if(settings.provider === 'openai') return 'ChatGPT';
+                 if(settings.provider === 'offline_ai') return '離線 OCR+AI';
                  return '';
             };
 
@@ -535,6 +435,7 @@
                 If field not found, use empty string/0.
             `;
 
+            // Online API Calls (Same as before)
             const callGemini = async (base64Image) => {
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${settings.geminiModel}:generateContent?key=${settings.geminiKey}`;
                 const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: getPrompt() }, { inline_data: { mime_type: "image/jpeg", data: base64Image } }] }], safetySettings: [{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }] }) });
@@ -563,52 +464,75 @@
                 } catch (e) { alert("❌ 連線失敗：" + e.message); } finally { isTesting.value = false; }
             };
 
+            // Main Analyze Entry
             const analyzeReceipt = async () => {
-                if (!isKeyConfigured.value) { errorModal.message = "未設定對應的 API Key。"; errorModal.show = true; return; }
+                if (settings.provider !== 'offline_ai' && !isKeyConfigured.value) { errorModal.message = "未設定對應的 API Key。"; errorModal.show = true; return; }
                 if (!form.image) return;
-                isAnalyzing.value = true; statusText.value = `呼叫 ${getProviderName()} 分析中...`;
+                isAnalyzing.value = true; 
+
                 try {
-                    const base64Image = form.image.split(',')[1];
-                    let rawText = settings.provider === 'gemini' ? await callGemini(base64Image) : await callOpenAI(base64Image);
-                    statusText.value = "資料解析中...";
-                    const result = JSON.parse(cleanJsonString(rawText));
-                    form.store = result.store || ''; form.itemTw = result.itemTw || ''; form.itemOriginal = result.itemOriginal || '';
-                    if (result.price) { form.price = parseFloat(String(result.price).replace(/[^0-9.]/g, '')) || 0; }
-                    if (result.date) form.date = result.date;
+                    if (settings.provider === 'offline_ai') {
+                         await analyzeOffline();
+                    } else {
+                        statusText.value = `呼叫 ${getProviderName()} 分析中...`;
+                        const base64Image = form.image.split(',')[1];
+                        let rawText = settings.provider === 'gemini' ? await callGemini(base64Image) : await callOpenAI(base64Image);
+                        statusText.value = "資料解析中...";
+                        const result = JSON.parse(cleanJsonString(rawText));
+                        form.store = result.store || ''; form.itemTw = result.itemTw || ''; form.itemOriginal = result.itemOriginal || '';
+                        if (result.price) { form.price = parseFloat(String(result.price).replace(/[^0-9.]/g, '')) || 0; }
+                        if (result.date) form.date = result.date;
+                    }
                 } catch (error) { console.error(error); errorModal.message = error.message; errorModal.show = true; } finally { isAnalyzing.value = false; }
             };
-            
-            // --- Offline Translation Logic ---
+
+            // --- Offline OCR & Translation Logic ---
             const downloadModel = async (lang) => {
-                if(!window.TranslationService) { alert("瀏覽器不支援模組載入，請檢查網路"); return; }
+                if(!window.TranslationService) { alert("瀏覽器不支援"); return; }
                 isDownloadingModel.value = true;
                 currentDownloadTarget.value = lang;
-                modelLoading.total = 100; modelLoading.loaded = 5; modelLoading.text = '初始化中...';
+                modelLoading.total = 100; modelLoading.loaded = 5; modelLoading.text = '準備下載中...';
                 try {
                     await window.TranslationService.getInstance(lang, (progress) => {
                         if(progress.status === 'progress' && progress.total) {
                             modelLoading.text = `下載中... ${progress.file}`;
-                            modelLoading.loaded = progress.loaded;
-                            modelLoading.total = progress.total;
+                            modelLoading.loaded = progress.loaded; modelLoading.total = progress.total;
                         }
                     });
-                    alert("模型下載完成！現在可以離線使用了。");
-                } catch(e) {
-                    alert("下載失敗: " + e.message);
-                } finally {
-                    isDownloadingModel.value = false;
-                    currentDownloadTarget.value = '';
-                    modelLoading.total = 0;
-                }
+                    if (!downloadedModels.value.includes(lang)) { downloadedModels.value.push(lang); localStorage.setItem('myTravel_downloaded_models', JSON.stringify(downloadedModels.value)); }
+                    alert("模型已準備就緒！");
+                } catch(e) { alert("下載失敗: " + e.message); } finally { isDownloadingModel.value = false; currentDownloadTarget.value = ''; modelLoading.total = 0; }
             };
-            
-            const resetDownloadState = () => {
-                isDownloadingModel.value = false;
-                modelLoading.total = 0;
-                modelLoading.loaded = 0;
-                modelLoading.text = '';
-                currentDownloadTarget.value = '';
-                alert("已重置下載狀態，請重新嘗試。");
+            const resetDownloadState = () => { isDownloadingModel.value = false; modelLoading.total = 0; downloadedModels.value = []; localStorage.removeItem('myTravel_downloaded_models'); alert("已重置"); };
+
+            const analyzeOffline = async () => {
+                statusText.value = "Tesseract OCR 識別中 (可能需要 10-20 秒)...";
+                
+                // 1. OCR Step
+                const worker = await Tesseract.createWorker(settings.currencyCode === 'JPY' ? 'jpn' : (settings.currencyCode === 'KRW' ? 'kor' : 'eng'));
+                const ret = await worker.recognize(form.image);
+                await worker.terminate();
+                const ocrText = ret.data.text;
+                console.log("OCR Result:", ocrText);
+                
+                if(!ocrText || ocrText.length < 5) throw new Error("OCR 無法識別文字，請重拍。");
+
+                // Simple Extraction Heuristics (Very Basic)
+                // Try to find the longest line as item name
+                const lines = ocrText.split('\n').filter(l => l.trim().length > 2);
+                let longestLine = lines.sort((a, b) => b.length - a.length)[0] || '';
+                form.itemOriginal = longestLine.substring(0, 30); // Limit length
+
+                // Try to find price (largest number)
+                const numbers = ocrText.match(/\d+[.,]\d+|\d+/g);
+                if(numbers) {
+                     const prices = numbers.map(n => parseFloat(n.replace(/,/g,''))).filter(n => !isNaN(n));
+                     if(prices.length > 0) form.price = Math.max(...prices);
+                }
+
+                // 2. Translation Step
+                statusText.value = "離線翻譯中...";
+                await translateItem(); // Reuse manual translate function
             };
 
             const translateItem = async () => {
@@ -616,113 +540,67 @@
                 if(!original) { alert('請先輸入原文品名'); return; }
                 
                 if (settings.provider === 'google_trans') {
-                    const url = `https://translate.google.com/?sl=auto&tl=zh-TW&text=${encodeURIComponent(original)}&op=translate`;
-                    window.open(url, '_blank');
+                    window.open(`https://translate.google.com/?sl=auto&tl=zh-TW&text=${encodeURIComponent(original)}&op=translate`, '_blank');
                 } else if (settings.provider === 'dictionary') {
-                    let found = null;
-                    for (const [key, val] of Object.entries(DICTIONARY)) { if (original.includes(key)) { found = val; break; } }
-                    if (found) { form.itemTw = found; alert(`已翻譯: ${found}`); } else { alert('字典中找不到此單字，請嘗試簡化關鍵字。'); }
+                    let found = null; for (const [key, val] of Object.entries(DICTIONARY)) { if (original.includes(key)) { found = val; break; } }
+                    if (found) { form.itemTw = found; alert(`已翻譯: ${found}`); } else { alert('字典未找到'); }
                 } else if (settings.provider === 'offline_ai') {
-                    if(!window.TranslationService) { alert("瀏覽器不支援模組載入"); return; }
-                    
+                    if(!window.TranslationService) { alert("瀏覽器不支援"); return; }
                     try {
-                        modelLoading.text = "模型準備中...";
-                        modelLoading.total = 100; modelLoading.loaded = 1; 
-                        
+                        modelLoading.text = "模型準備中..."; modelLoading.total = 100; modelLoading.loaded = 1; 
                         let targetLang = 'en'; 
                         if(settings.currencyCode === 'JPY') targetLang = 'ja';
                         if(settings.currencyCode === 'KRW') targetLang = 'ko';
 
-                        // Get instance with type info
-                        const { translator, type } = await window.TranslationService.getInstance(targetLang, (progress) => {
-                            if(progress.status === 'progress' && progress.total) {
-                                modelLoading.text = `載入中: ${progress.file}`;
-                                modelLoading.loaded = progress.loaded;
-                                modelLoading.total = progress.total;
-                            }
-                        });
-
+                        const { translator, type } = await window.TranslationService.getInstance(targetLang, (p) => { if(p.status==='progress') { modelLoading.text=`載入中: ${p.file}`; modelLoading.loaded=p.loaded; modelLoading.total=p.total; } });
                         modelLoading.text = "正在翻譯...";
                         
-                        // Handle NLLB specialized inputs
                         let output;
                         if (type === 'nllb') {
-                            let src_lang_code = 'eng_Latn';
-                            if (targetLang === 'ja') src_lang_code = 'jpn_Jpan';
-                            if (targetLang === 'ko') src_lang_code = 'kor_Hang';
-                            
-                            output = await translator(original, {
-                                src_lang: src_lang_code,
-                                tgt_lang: 'zho_Hant'
-                            });
+                            let src = 'eng_Latn';
+                            if (targetLang === 'ja') src = 'jpn_Jpan';
+                            if (targetLang === 'ko') src = 'kor_Hang';
+                            output = await translator(original, { src_lang: src, tgt_lang: 'zho_Hant' });
                         } else {
-                            // Standard Opus-MT
                             output = await translator(original);
                         }
-                        
-                        if(output && output[0]) {
-                            form.itemTw = output[0].translation_text;
-                        }
+                        if(output && output[0]) form.itemTw = output[0].translation_text;
                         modelLoading.total = 0; 
-                    } catch (e) {
-                        alert("離線翻譯錯誤: " + e.message);
-                        modelLoading.total = 0;
-                    }
+                    } catch (e) { alert("離線翻譯錯誤: " + e.message); modelLoading.total = 0; }
                 }
             };
 
             const handleImageUpload = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
+                const file = e.target.files[0]; if (!file) return;
                 const reader = new FileReader();
                 reader.onload = (evt) => {
-                    const img = new Image();
-                    img.src = evt.target.result;
+                    const img = new Image(); img.src = evt.target.result;
                     img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        const MAX_WIDTH = 1024;
-                        let w = img.width, h = img.height;
-                        if (w > MAX_WIDTH) { h *= MAX_WIDTH / w; w = MAX_WIDTH; }
-                        canvas.width = w; canvas.height = h;
-                        ctx.drawImage(img, 0, 0, w, h);
+                        const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                        const MAX = 1024; let w = img.width, h = img.height;
+                        if (w > MAX) { h *= MAX / w; w = MAX; }
+                        canvas.width = w; canvas.height = h; ctx.drawImage(img, 0, 0, w, h);
                         form.image = canvas.toDataURL('image/jpeg', 0.8);
-                        if(isAIProvider.value && isKeyConfigured.value) analyzeReceipt();
+                        if((isAIProvider.value && isKeyConfigured.value) || isOfflineOCR.value) analyzeReceipt();
                     };
                 };
-                reader.readAsDataURL(file);
-                e.target.value = '';
+                reader.readAsDataURL(file); e.target.value = '';
             };
 
-            const saveExpense = () => {
-                if (!form.itemTw || !form.price) { alert('請輸入完整資訊'); return; }
-                expenses.value.push({ ...form });
-                saveAll();
-                closeModal();
-            };
-
+            const saveExpense = () => { if (!form.itemTw || !form.price) { alert('請輸入完整資訊'); return; } expenses.value.push({ ...form }); saveAll(); closeModal(); };
             const deleteExpense = (id) => { if(confirm('刪除?')) { expenses.value = expenses.value.filter(i => i.id !== id); saveAll(); } };
             
             const currencyCode = computed(() => settings.currencyCode);
             const totalTWD = computed(() => expenses.value.reduce((sum, item) => sum + Math.round(item.price * settings.rate), 0));
-            const groupedExpenses = computed(() => {
-                const groups = {};
-                const sorted = [...expenses.value].sort((a, b) => new Date(b.date) - new Date(a.date));
-                sorted.forEach(item => {
-                    if (!groups[item.date]) groups[item.date] = [];
-                    groups[item.date].push(item);
-                });
-                return groups;
-            });
-
-            const formatCurrency = (val) => (!val && val !== 0) ? '-' : Number(val).toLocaleString();
+            const groupedExpenses = computed(() => { const g = {}; [...expenses.value].sort((a,b)=>new Date(b.date)-new Date(a.date)).forEach(i => { if(!g[i.date]) g[i.date]=[]; g[i.date].push(i); }); return g; });
+            const formatCurrency = (v) => (!v && v !== 0) ? '-' : Number(v).toLocaleString();
             const formatDate = (d) => { if(!d) return ''; const date = new Date(d); return `${date.getMonth()+1}月${date.getDate()}日`; };
             const getDayLabel = (d) => { if(!d) return ''; return ['週日','週一','週二','週三','週四','週五','週六'][new Date(d).getDay()]; };
-            const getDayTotal = (items) => items.reduce((sum, item) => sum + Math.round(item.price * settings.rate), 0);
+            const getDayTotal = (i) => i.reduce((s, it) => s + Math.round(it.price * settings.rate), 0);
 
             return {
-                showModal, showSettings, viewingImage, fileInput, isAnalyzing, statusText, isTesting, errorModal, isKeyConfigured, isAIProvider, getProviderName,
-                settings, form, currencyCode, groupedExpenses, totalTWD, modelLoading, isDownloadingModel, currentDownloadTarget,
+                showModal, showSettings, viewingImage, fileInput, isAnalyzing, statusText, isTesting, errorModal, isKeyConfigured, isAIProvider, isOfflineOCR, getProviderName,
+                settings, form, currencyCode, groupedExpenses, totalTWD, modelLoading, isDownloadingModel, currentDownloadTarget, downloadedModels,
                 openAddModal, closeModal, triggerCamera, handleImageUpload, analyzeReceipt, translateItem, saveExpense, saveSettings, deleteExpense, viewImage, downloadModel, resetDownloadState,
                 testAPIConnection, formatCurrency, formatDate, getDayLabel, getDayTotal
             };
