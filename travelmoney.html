@@ -1,156 +1,728 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>綺麗旅帳 Travel Expense V5.17</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>旅收 - 離線旗艦版 V7.0</title>
+    
+    <!-- 核心函式庫 (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- OCR 引擎 -->
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+    <!-- 圖表 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Zen+Maru+Gothic:wght@400;700&display=swap" rel="stylesheet">
 
-<!-- CDN -->
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        body {
+            font-family: 'Zen Maru Gothic', 'Noto Sans TC', sans-serif;
+            background-color: #f8fafc;
+            color: #334155;
+            -webkit-tap-highlight-color: transparent;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;700&display=swap" rel="stylesheet">
+        .card {
+            background: #ffffff;
+            border-radius: 24px; 
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+            border: 1px solid rgba(0,0,0,0.02);
+        }
 
-<style>
-body {
-  font-family: 'Zen Maru Gothic', sans-serif;
-  background:#fff1f2;
-}
-.card {
-  background:rgba(255,255,255,.9);
-  border-radius:20px;
-  box-shadow:0 6px 20px rgba(244,63,94,.15);
-}
-.btn-pink {
-  background:linear-gradient(135deg,#fbcfe8,#f43f5e);
-  color:#fff;
-}
-</style>
+        .btn-gradient {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); 
+            color: white;
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.25); 
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn-gradient:active { transform: scale(0.96); box-shadow: 0 4px 10px rgba(99, 102, 241, 0.2); }
+        .btn-gradient:disabled { background: #cbd5e1; box-shadow: none; cursor: not-allowed; }
+
+        .btn-pink { /* 保留原本的粉色風格給刪除/取消等操作 */
+            background: linear-gradient(135deg, #f43f5e 0%, #fb7185 100%); 
+            color: white;
+        }
+
+        .input-minimal {
+            background: #f1f5f9; border: 1px solid transparent; border-radius: 16px;
+            padding: 12px 16px; outline: none; width: 100%; font-size: 15px;
+            transition: all 0.3s;
+        }
+        .input-minimal:focus { background: #fff; border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.05); }
+
+        .nav-item {
+            color: #94a3b8; transition: all 0.3s;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100%; font-size: 10px; font-weight: 500;
+        }
+        .nav-item.active { color: #6366f1; }
+        .nav-item i { font-size: 20px; margin-bottom: 2px; }
+
+        .receipt-thumb { width: 56px; height: 56px; border-radius: 16px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        
+        .loader { width: 24px; height: 24px; border: 3px solid #e0e7ff; border-bottom-color: #6366f1; border-radius: 50%; display: inline-block; animation: rotation 1s linear infinite; }
+        @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .slide-up-enter-active, .slide-up-leave-active { transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        .slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); }
+
+        .item-row { border-bottom: 1px solid #f1f5f9; padding: 12px 0; display: flex; align-items: center; }
+        .item-row:last-child { border-bottom: none; }
+        .checkbox-custom { width: 20px; height: 20px; accent-color: #6366f1; margin-right: 12px; cursor: pointer; }
+
+        /* Progress Bar */
+        .progress-bar-container { width: 100%; background-color: #e2e8f0; border-radius: 999px; height: 6px; overflow: hidden; margin-top: 8px; }
+        .progress-bar-fill { height: 100%; background-color: #10b981; transition: width 0.3s ease; }
+    </style>
 </head>
-
 <body>
-<div id="app" class="max-w-md mx-auto min-h-screen relative">
 
-<!-- Header -->
-<header class="p-6 bg-white/70 sticky top-0 z-10 backdrop-blur">
-  <h1 class="text-2xl font-bold text-slate-800">
-    綺麗旅帳 <i class="fa-solid fa-plane text-rose-400"></i>
-  </h1>
-</header>
+<div id="app" class="flex flex-col h-screen max-w-md mx-auto relative overflow-hidden bg-slate-50">
+    
+    <!-- Top Bar -->
+    <header class="px-6 pt-12 pb-4 bg-white/80 backdrop-blur-md sticky top-0 z-10 flex justify-between items-center border-b border-gray-100">
+        <h1 class="text-xl font-bold text-slate-800 tracking-wide">
+            <span v-if="currentTab === 'home'">旅收 <span class="text-xs text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full ml-1 font-bold">OFFLINE</span></span>
+            <span v-else-if="currentTab === 'stats'">消費統計</span>
+            <span v-else>設定與模型</span>
+        </h1>
+        <div v-if="currentTab === 'home'" class="text-right">
+            <p class="text-[10px] text-gray-400 font-bold">匯率 {{ settings.rate }}</p>
+            <p class="text-sm font-bold text-slate-700">1 {{ settings.currencyCode }}</p>
+        </div>
+    </header>
 
-<!-- Summary -->
-<div class="p-4 space-y-4">
-  <div class="card p-4 text-center">
-    <div class="text-xs text-gray-400 mb-1">旅程總花費</div>
-    <div class="text-3xl font-bold text-rose-500">
-      NT$ {{ format(totalTWD) }}
+    <!-- Content Area -->
+    <main class="flex-1 overflow-y-auto no-scrollbar pb-28">
+        
+        <!-- Tab 1: HOME -->
+        <div v-if="currentTab === 'home'" class="px-4 py-4 animate-fade-in">
+            <!-- Summary -->
+            <div class="card p-6 mb-6 bg-gradient-to-br from-indigo-500 to-violet-600 text-white border-none relative overflow-hidden">
+                <div class="absolute -right-6 -top-6 text-white/10 text-9xl"><i class="fa-solid fa-wallet"></i></div>
+                <p class="text-xs text-indigo-100 mb-1 font-bold tracking-wider">總消費金額 (NT$)</p>
+                <div class="text-4xl font-bold tracking-tight">{{ formatCurrency(totalTWD) }}</div>
+                <div class="mt-4 flex gap-4 text-xs text-white/80">
+                    <div><i class="fa-solid fa-receipt mr-1"></i> {{ (expenses || []).length }} 筆</div>
+                    <div><i class="fa-solid fa-globe mr-1"></i> {{ settings.currencyCode }}</div>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div v-if="(expenses || []).length === 0" class="text-center py-16">
+                <div class="w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-300 text-4xl animate-bounce">
+                    <i class="fa-solid fa-camera"></i>
+                </div>
+                <p class="text-gray-500 font-medium">還沒有資料，拍張收據試試！</p>
+                <p class="text-xs text-gray-400 mt-2">第一次使用請先到「設定」下載翻譯模型</p>
+            </div>
+
+            <!-- List -->
+            <div v-for="(dayExpenses, date) in groupedExpenses" :key="date" class="mb-6">
+                <div class="flex items-center justify-between mb-3 px-2 sticky top-0 bg-slate-50/95 backdrop-blur py-2 z-10">
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-lg font-bold text-slate-800">{{ formatDate(date) }}</span>
+                        <span class="text-xs text-gray-400 font-medium">{{ getDayLabel(date) }}</span>
+                    </div>
+                    <span class="text-xs font-bold text-indigo-500 bg-indigo-50 px-2 py-1 rounded-lg">NT$ {{ formatCurrency(getDayTotal(dayExpenses)) }}</span>
+                </div>
+
+                <div class="space-y-3">
+                    <div v-for="item in dayExpenses" :key="item.id" class="card p-3 flex gap-3 items-center relative overflow-hidden group hover:shadow-lg transition-shadow">
+                        <button @click.stop="deleteExpense(item.id)" class="absolute right-2 top-2 text-gray-300 hover:text-red-500 p-2 z-10"><i class="fa-solid fa-trash-can"></i></button>
+                        <div class="shrink-0 cursor-pointer relative" @click="viewImage(item.image)">
+                            <img :src="item.image || 'https://via.placeholder.com/150?text=No+Img'" class="receipt-thumb" alt="receipt">
+                            <div class="absolute -bottom-1 -right-1 bg-white text-[10px] px-1.5 py-0.5 rounded-lg shadow border border-gray-100">{{ getCategoryIcon(item.category) }}</div>
+                        </div>
+                        <div class="flex-1 min-w-0 py-1">
+                            <div class="flex justify-between items-start mb-1">
+                                <h3 class="font-bold text-slate-800 truncate text-[15px]">{{ item.itemTw }}</h3>
+                            </div>
+                            <div class="flex justify-between items-end">
+                                <span class="text-xs text-gray-400 truncate max-w-[120px]">{{ item.itemOriginal }}</span>
+                                <div class="text-right">
+                                    <div class="text-sm font-bold text-indigo-600">NT$ {{ formatCurrency(Math.round(item.price * settings.rate)) }}</div>
+                                    <div class="text-[10px] text-gray-400">{{ formatCurrency(item.price) }} {{ currencyCode }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: STATS -->
+        <div v-if="currentTab === 'stats'" class="px-4 py-6">
+             <div class="card p-5 mb-6">
+                <h3 class="text-sm font-bold text-gray-500 mb-4"><i class="fa-solid fa-chart-pie mr-2 text-indigo-500"></i>類別佔比</h3>
+                <div class="h-64 relative">
+                    <canvas id="categoryChart"></canvas>
+                    <div v-if="(expenses || []).length === 0" class="absolute inset-0 flex items-center justify-center text-gray-300 text-sm">無資料</div>
+                </div>
+            </div>
+            <div class="card p-5">
+                <h3 class="text-sm font-bold text-gray-500 mb-4"><i class="fa-solid fa-chart-simple mr-2 text-blue-500"></i>每日支出</h3>
+                 <div class="h-48 relative">
+                    <canvas id="dailyChart"></canvas>
+                     <div v-if="(expenses || []).length === 0" class="absolute inset-0 flex items-center justify-center text-gray-300 text-sm">無資料</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 3: SETTINGS (Model Management) -->
+        <div v-if="currentTab === 'settings'" class="px-4 py-6">
+            <div class="space-y-6">
+                <!-- Offline AI Models -->
+                <div class="card p-5 border-l-4 border-indigo-500">
+                    <h3 class="text-sm font-bold text-gray-800 mb-4">離線 AI 模型管理</h3>
+                    <p class="text-xs text-gray-500 mb-4">下載後即可在無網路環境下進行翻譯與辨識。首次下載需較長時間 (約 100MB+)。</p>
+                    
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <div class="flex items-center">
+                                <span class="text-2xl mr-3">🇯🇵</span>
+                                <div>
+                                    <p class="text-sm font-bold text-slate-700">日文轉繁中</p>
+                                    <p class="text-[10px] text-gray-400">適用於日本旅遊收據</p>
+                                </div>
+                            </div>
+                            <button @click="downloadModel('ja')" :disabled="isDownloadingModel" :class="['px-3 py-1.5 rounded-lg text-xs font-bold transition', downloadedModels.includes('ja') ? 'bg-green-100 text-green-700' : 'bg-indigo-600 text-white hover:bg-indigo-700']">
+                                {{ downloadedModels.includes('ja') ? '已下載' : '下載' }}
+                            </button>
+                        </div>
+                         <div class="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <div class="flex items-center">
+                                <span class="text-2xl mr-3">🇰🇷</span>
+                                <div>
+                                    <p class="text-sm font-bold text-slate-700">韓文轉繁中</p>
+                                    <p class="text-[10px] text-gray-400">適用於韓國旅遊收據</p>
+                                </div>
+                            </div>
+                            <button @click="downloadModel('ko')" :disabled="isDownloadingModel" :class="['px-3 py-1.5 rounded-lg text-xs font-bold transition', downloadedModels.includes('ko') ? 'bg-green-100 text-green-700' : 'bg-indigo-600 text-white hover:bg-indigo-700']">
+                                {{ downloadedModels.includes('ko') ? '已下載' : '下載' }}
+                            </button>
+                        </div>
+                        <div class="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <div class="flex items-center">
+                                <span class="text-2xl mr-3">🇺🇸</span>
+                                <div>
+                                    <p class="text-sm font-bold text-slate-700">英文轉繁中</p>
+                                    <p class="text-[10px] text-gray-400">適用於歐美/東南亞</p>
+                                </div>
+                            </div>
+                            <button @click="downloadModel('en')" :disabled="isDownloadingModel" :class="['px-3 py-1.5 rounded-lg text-xs font-bold transition', downloadedModels.includes('en') ? 'bg-green-100 text-green-700' : 'bg-indigo-600 text-white hover:bg-indigo-700']">
+                                {{ downloadedModels.includes('en') ? '已下載' : '下載' }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div v-if="modelLoading.total > 0" class="mt-4 bg-indigo-50 p-3 rounded-lg">
+                        <div class="flex justify-between text-xs text-indigo-700 font-bold mb-1">
+                            <span>{{ modelLoading.text }}</span>
+                            <span>{{ Math.round((modelLoading.loaded / modelLoading.total) * 100) }}%</span>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-fill" :style="{ width: (modelLoading.loaded / modelLoading.total * 100) + '%' }"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Currency -->
+                <div class="card p-5">
+                    <h3 class="text-sm font-bold text-gray-800 mb-4">匯率設定</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-xs font-bold text-gray-500 mb-1 block">貨幣</label>
+                            <select v-model="settings.currencyCode" class="input-minimal">
+                                <option value="JPY">JPY 日圓</option>
+                                <option value="KRW">KRW 韓元</option>
+                                <option value="USD">USD 美金</option>
+                                <option value="EUR">EUR 歐元</option>
+                                <option value="THB">THB 泰銖</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-gray-500 mb-1 block">匯率</label>
+                            <input type="number" v-model.number="settings.rate" step="0.0001" class="input-minimal font-bold text-slate-700">
+                        </div>
+                    </div>
+                </div>
+                
+                 <button @click="clearAllData" class="w-full py-3 bg-red-50 text-red-500 rounded-xl font-bold text-sm hover:bg-red-100 transition">清除所有資料</button>
+                 <div class="text-center text-[10px] text-gray-300 pb-10">V7.0 Offline Edition</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Navigation -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 h-20 px-6 pb-6 flex justify-between items-center z-20 max-w-md mx-auto">
+        <button @click="currentTab = 'home'" :class="['nav-item', currentTab === 'home' ? 'active' : '']"><i class="fa-solid fa-house"></i><span>記帳</span></button>
+        <button @click="openAddModal" class="w-14 h-14 rounded-full btn-gradient -mt-8 flex items-center justify-center text-2xl shadow-xl hover:scale-105 transition-transform"><i class="fa-solid fa-camera"></i></button>
+        <button @click="currentTab = 'stats'" :class="['nav-item', currentTab === 'stats' ? 'active' : '']"><i class="fa-solid fa-chart-pie"></i><span>統計</span></button>
+        <button @click="currentTab = 'settings'" :class="['nav-item', currentTab === 'settings' ? 'active' : '']"><i class="fa-solid fa-sliders"></i><span>設定</span></button>
+    </nav>
+
+    <!-- Add Modal -->
+    <transition name="modal">
+        <div v-if="showModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+            <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeModal"></div>
+            <transition name="slide-up">
+                <div v-if="showModal" class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-2xl p-6 relative z-50 max-h-[92vh] overflow-y-auto flex flex-col shadow-2xl">
+                    <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 shrink-0"></div>
+                    
+                    <!-- Multi-Item Mode -->
+                    <div v-if="(detectedItems || []).length > 0 && !isConfirmedSelection">
+                        <h3 class="text-xl font-bold text-slate-800 mb-2">確認品項 (離線辨識)</h3>
+                        <p class="text-xs text-gray-500 mb-4">OCR 掃描到以下內容，請勾選正確項目：</p>
+                        <div class="max-h-[50vh] overflow-y-auto mb-4 border border-gray-100 rounded-xl bg-slate-50 p-2">
+                             <div v-for="(item, idx) in detectedItems" :key="idx" class="item-row">
+                                <input type="checkbox" v-model="item.selected" class="checkbox-custom">
+                                <div class="flex-1 min-w-0 ml-2">
+                                    <div class="font-bold text-sm text-slate-700 truncate">{{ item.nameTw || '翻譯中...' }}</div>
+                                    <div class="text-xs text-gray-400 truncate">{{ item.nameOrg }}</div>
+                                </div>
+                                <div class="font-mono font-bold text-indigo-600 text-sm ml-2">{{ item.price }}</div>
+                            </div>
+                        </div>
+                         <div class="flex justify-between items-center text-sm font-bold text-slate-700 bg-gray-100 p-3 rounded-xl mb-4">
+                            <span>合計</span>
+                            <span class="text-indigo-600">{{ formatCurrency(selectionTotal) }} {{ currencyCode }}</span>
+                        </div>
+                        <div class="flex gap-3">
+                            <button @click="detectedItems = []" class="flex-1 py-3 rounded-xl bg-gray-100 text-gray-500 font-bold">手動</button>
+                            <button @click="confirmItems" class="flex-[2] py-3 rounded-xl btn-gradient font-bold shadow-lg">確認匯入</button>
+                        </div>
+                    </div>
+
+                    <!-- Single Item / Manual Form -->
+                    <div v-else>
+                        <div class="mb-5 relative group">
+                            <div v-if="!form.image" class="w-full h-40 bg-slate-50 rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 cursor-pointer hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-400 transition" @click="triggerCamera">
+                                <i class="fa-solid fa-camera text-3xl mb-2"></i>
+                                <span class="text-sm font-bold">拍照掃描 (離線)</span>
+                            </div>
+                            <div v-else class="relative w-full h-48 rounded-2xl overflow-hidden shadow-sm bg-black/5">
+                                <img :src="form.image" class="w-full h-full object-contain">
+                                <button @click="triggerCamera" class="absolute bottom-2 right-2 bg-white/90 p-2 rounded-full text-slate-600 text-xs font-bold shadow hover:bg-white z-10"><i class="fa-solid fa-rotate mr-1"></i>重拍</button>
+                                <div v-if="isAnalyzing" class="absolute inset-0 bg-white/90 z-20 flex flex-col items-center justify-center backdrop-blur-sm text-center px-4">
+                                    <span class="loader mb-3"></span>
+                                    <span class="text-indigo-600 font-bold text-base mb-1">離線分析中...</span>
+                                    <span class="text-xs text-gray-500">{{ statusText }}</span>
+                                </div>
+                            </div>
+                            <input type="file" ref="fileInput" accept="image/*" class="hidden" @change="handleImageUpload">
+                        </div>
+
+                        <!-- Manual Fields -->
+                        <div class="space-y-4">
+                            <div>
+                                <label class="text-xs font-bold text-gray-400 mb-2 block uppercase tracking-wider">分類</label>
+                                <div class="flex justify-between gap-2 overflow-x-auto no-scrollbar pb-1">
+                                    <button v-for="cat in categories" :key="cat.id" @click="form.category = cat.id" 
+                                        :class="['flex flex-col items-center p-2 rounded-xl min-w-[60px] transition border', form.category === cat.id ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-gray-100 text-gray-400']">
+                                        <span class="text-xl mb-1">{{ cat.icon }}</span>
+                                        <span class="text-[10px] font-bold">{{ cat.name }}</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="text-xs font-bold text-gray-400 mb-1 block">日期</label><input type="date" v-model="form.date" class="input-minimal"></div>
+                                <div><label class="text-xs font-bold text-gray-400 mb-1 block">店舖</label><input type="text" v-model="form.store" class="input-minimal" placeholder="例: 7-11"></div>
+                            </div>
+                            
+                            <div>
+                                <label class="text-xs font-bold text-gray-400 mb-1 block">品項 (中文)</label>
+                                <input type="text" v-model="form.itemTw" class="input-minimal" placeholder="輸入或使用翻譯">
+                                <div class="flex gap-2 mt-2">
+                                    <input type="text" v-model="form.itemOriginal" class="input-minimal text-xs text-gray-400 bg-gray-50 flex-1" placeholder="原文">
+                                    <button @click="translateItem" class="px-3 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold whitespace-nowrap border border-indigo-100">翻譯</button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="text-xs font-bold text-gray-400 mb-1 block">金額 ({{ currencyCode }})</label>
+                                <div class="relative">
+                                    <input type="number" v-model.number="form.price" class="input-minimal pl-4 pr-16 text-xl font-bold text-slate-700" placeholder="0">
+                                    <div class="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+                                        <button @click="form.tax = 'inc'" :class="['text-[10px] px-2 py-1 rounded font-bold transition', form.tax==='inc' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400']">含稅</button>
+                                    </div>
+                                </div>
+                                <p class="text-right text-xs text-indigo-400 mt-1 font-bold">≈ NT$ {{ formatCurrency(Math.round(form.price * settings.rate)) }}</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-8 flex gap-3">
+                            <button @click="closeModal" class="flex-1 py-3 rounded-xl bg-gray-100 text-gray-500 font-bold">取消</button>
+                            <button @click="saveExpense" class="flex-[2] py-3 rounded-xl btn-gradient font-bold shadow-lg" :disabled="isAnalyzing">確認儲存</button>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+        </div>
+    </transition>
+
+    <div v-if="viewingImage" class="fixed inset-0 bg-black/95 z-[60] flex flex-col justify-center items-center p-4 animate-fade-in" @click="viewingImage = null">
+        <img :src="viewingImage" class="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl">
+        <p class="text-white/50 text-sm mt-4 font-light tracking-widest">點擊任意處關閉</p>
     </div>
-    <div class="text-sm text-gray-500 mt-1">
-      當地幣 {{ format(totalLocal) }} {{ settings.currencyCode }}
-    </div>
-  </div>
-
-  <div class="card p-4">
-    <div class="text-sm font-bold mb-2 text-slate-700">每日消費占比</div>
-    <canvas id="dailyChart" height="220"></canvas>
-  </div>
 </div>
 
-<!-- List -->
-<div class="p-4 space-y-4">
-  <div v-for="(items, date) in grouped" :key="date" class="card p-3">
-    <div class="flex justify-between text-sm font-bold mb-2">
-      <span>{{ date }}</span>
-      <span>NT$ {{ format(dayTotal(items)) }}</span>
-    </div>
-    <div v-for="i in items" :key="i.id" class="flex justify-between text-sm border-b py-1">
-      <span class="truncate">{{ i.itemTw }}</span>
-      <span class="font-mono">NT$ {{ format(i.price * settings.rate) }}</span>
-    </div>
-  </div>
-</div>
+<script type="module">
+    import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.14.0';
+    env.allowLocalModels = false;
 
-<!-- FAB -->
-<button @click="openAdd"
-  class="fixed bottom-8 right-6 w-14 h-14 rounded-full btn-pink text-2xl shadow-xl">
-  <i class="fa fa-plus"></i>
-</button>
-
-<!-- Modal -->
-<div v-if="showModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-  <div class="bg-white w-full max-w-sm rounded-2xl p-5 space-y-3">
-    <h3 class="font-bold text-center">新增消費</h3>
-    <input v-model="form.itemTw" placeholder="品項" class="w-full border p-2 rounded">
-    <input v-model.number="form.price" placeholder="金額" type="number" class="w-full border p-2 rounded">
-    <button @click="save" class="btn-pink w-full py-2 rounded">儲存</button>
-    <button @click="showModal=false" class="w-full py-1 text-gray-400">取消</button>
-  </div>
-</div>
-
-</div>
+    class TranslationService {
+        static instances = {};
+        static async getInstance(lang, progressCallback) {
+            if (!this.instances[lang]) {
+                let modelID = 'Xenova/opus-mt-en-zh'; // Default
+                if (lang === 'ja') modelID = 'Xenova/opus-mt-ja-en'; // Pipeline approach maybe better but stick to direct if available or pivot
+                // NOTE: opus-mt-ja-zh doesn't exist directly on Xenova hub easily. 
+                // We will use NLLB for Asian languages as it's the standard for this now.
+                if (lang === 'ja' || lang === 'ko') modelID = 'Xenova/nllb-200-distilled-600M';
+                
+                this.instances[lang] = await pipeline('translation', modelID, { progress_callback: progressCallback });
+            }
+            return this.instances[lang];
+        }
+    }
+    window.TranslationService = TranslationService;
+</script>
 
 <script>
-const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
+    const { createApp, ref, reactive, computed, onMounted, watch, nextTick } = Vue;
 
-createApp({
-setup(){
-  const showModal = ref(false);
-  const expenses = ref(JSON.parse(localStorage.getItem('travel_exp')||'[]'));
-  const settings = reactive({ rate:0.22, currencyCode:'JPY' });
+    createApp({
+        setup() {
+            const currentTab = ref('home');
+            const showModal = ref(false);
+            const viewingImage = ref(null);
+            const fileInput = ref(null);
+            const isAnalyzing = ref(false);
+            const isDownloadingModel = ref(false);
+            const statusText = ref('');
+            
+            const detectedItems = ref([]);
+            const isConfirmedSelection = ref(false);
+            const downloadedModels = ref([]);
+            const modelLoading = reactive({ loaded: 0, total: 0, text: '' });
 
-  const form = reactive({ itemTw:'', price:0 });
+            const categories = [
+                { id: 'food', name: '餐飲', icon: '🍜' },
+                { id: 'shopping', name: '購物', icon: '🛍️' },
+                { id: 'transport', name: '交通', icon: '🚄' },
+                { id: 'hotel', name: '住宿', icon: '🏨' },
+                { id: 'ticket', name: '娛樂', icon: '🎟️' },
+                { id: 'other', name: '其他', icon: '📦' }
+            ];
 
-  const grouped = computed(()=>{
-    const g={};
-    expenses.value.forEach(e=>{
-      if(!g[e.date]) g[e.date]=[];
-      g[e.date].push(e);
-    });
-    return g;
-  });
+            const settings = reactive({
+                rate: 0.2150,
+                currencyCode: 'JPY',
+                provider: 'offline_ai', // FORCED DEFAULT
+            });
 
-  const totalTWD = computed(()=>expenses.value.reduce((s,i)=>s+i.price*settings.rate,0));
-  const totalLocal = computed(()=>expenses.value.reduce((s,i)=>s+i.price,0));
+            const expenses = ref([]);
+            const form = reactive({ id: null, date: '', store: '', itemTw: '', itemOriginal: '', price: '', tax: 'inc', image: null, category: 'food' });
 
-  const dayTotal = (items)=>items.reduce((s,i)=>s+i.price*settings.rate,0);
+            let categoryChartInstance = null;
+            let dailyChartInstance = null;
 
-  const save = ()=>{
-    expenses.value.push({
-      id:Date.now(),
-      date:new Date().toISOString().slice(0,10),
-      itemTw:form.itemTw,
-      price:form.price
-    });
-    localStorage.setItem('travel_exp',JSON.stringify(expenses.value));
-    form.itemTw=''; form.price=0;
-    showModal.value=false;
-  };
+            onMounted(() => {
+                const savedExp = localStorage.getItem('myTravel_expenses_v7');
+                const savedSet = localStorage.getItem('myTravel_settings_v7');
+                const savedModels = localStorage.getItem('myTravel_downloaded_models');
+                if (savedExp) { try { expenses.value = JSON.parse(savedExp) || []; } catch(e){ expenses.value=[]; } }
+                if (savedSet) { try { Object.assign(settings, JSON.parse(savedSet)); } catch(e){} }
+                if (savedModels) { try { downloadedModels.value = JSON.parse(savedModels); } catch(e){} }
+                resetForm();
+            });
 
-  let chart=null;
-  onMounted(()=>{
-    const ctx=document.getElementById('dailyChart');
-    chart=new Chart(ctx,{
-      type:'doughnut',
-      data:{ labels:[], datasets:[{ data:[], backgroundColor:['#fb7185','#f472b6','#f9a8d4','#fecdd3','#fde68a'] }] }
-    });
-  });
+            const saveAll = () => {
+                localStorage.setItem('myTravel_expenses_v7', JSON.stringify(expenses.value));
+                localStorage.setItem('myTravel_settings_v7', JSON.stringify(settings));
+            };
 
-  watch(grouped,()=>{
-    if(!chart) return;
-    chart.data.labels=Object.keys(grouped.value);
-    chart.data.datasets[0].data=Object.values(grouped.value).map(dayTotal);
-    chart.update();
-  },{deep:true});
+            const saveSettings = () => {
+                saveAll();
+                alert('設定已儲存');
+            };
 
-  const format=v=>Math.round(v).toLocaleString();
-  const openAdd=()=>showModal.value=true;
+            watch(currentTab, (newTab) => {
+                if (newTab === 'stats') nextTick(() => renderCharts());
+            });
 
-  return {showModal,form,save,openAdd,grouped,dayTotal,totalTWD,totalLocal,format,settings};
-}
-}).mount('#app');
+            const resetForm = () => {
+                Object.assign(form, {
+                    id: Date.now(),
+                    date: new Date().toISOString().split('T')[0],
+                    store: '', itemTw: '', itemOriginal: '', price: '', tax: 'inc', image: null, category: 'food'
+                });
+                detectedItems.value = [];
+                isConfirmedSelection.value = false;
+            };
+
+            const openAddModal = () => { resetForm(); showModal.value = true; };
+            const closeModal = () => showModal.value = false;
+            const triggerCamera = () => fileInput.value.click();
+            const viewImage = (src) => { if(src) viewingImage.value = src; };
+            const clearAllData = () => { if(confirm('確定清除所有資料？')) { expenses.value = []; saveAll(); } };
+
+            const currencyCode = computed(() => settings.currencyCode);
+            const totalTWD = computed(() => (expenses.value || []).reduce((sum, item) => sum + Math.round(item.price * settings.rate), 0));
+            const groupedExpenses = computed(() => { 
+                const g = {}; 
+                const list = Array.isArray(expenses.value) ? expenses.value : [];
+                [...list].sort((a,b)=>new Date(b.date)-new Date(a.date)).forEach(i => { 
+                    if(!g[i.date]) g[i.date]=[]; g[i.date].push(i); 
+                }); 
+                return g; 
+            });
+            const selectionTotal = computed(() => (detectedItems.value || []).reduce((sum, item) => item.selected ? sum + (parseFloat(item.price)||0) : sum, 0));
+
+            const formatCurrency = (v) => (!v && v !== 0) ? '-' : Number(v).toLocaleString();
+            const formatDate = (d) => { if(!d) return ''; const date = new Date(d); return `${date.getMonth()+1}/${date.getDate()}`; };
+            const getDayLabel = (d) => { if(!d) return ''; return ['週日','週一','週二','週三','週四','週五','週六'][new Date(d).getDay()]; };
+            const getDayTotal = (i) => (i||[]).reduce((s, it) => s + Math.round(it.price * settings.rate), 0);
+            const getCategoryIcon = (id) => { const c = categories.find(c => c.id === id); return c ? c.icon : '📦'; };
+
+            // --- OFFLINE AI LOGIC ---
+            const downloadModel = async (lang) => {
+                if(!window.TranslationService) { alert("瀏覽器不支援"); return; }
+                isDownloadingModel.value = true;
+                modelLoading.total = 100; modelLoading.loaded = 1; modelLoading.text = '準備下載...';
+                
+                try {
+                    await window.TranslationService.getInstance(lang, (progress) => {
+                        if(progress.status === 'progress' && progress.total) {
+                            modelLoading.text = `下載中... ${progress.file}`;
+                            modelLoading.loaded = progress.loaded; modelLoading.total = progress.total;
+                        }
+                    });
+                    if (!downloadedModels.value.includes(lang)) { 
+                        downloadedModels.value.push(lang); 
+                        localStorage.setItem('myTravel_downloaded_models', JSON.stringify(downloadedModels.value)); 
+                    }
+                    alert("模型已下載完成！您可以離線使用了。");
+                } catch(e) { alert("下載失敗: " + e.message); } finally { isDownloadingModel.value = false; modelLoading.total = 0; }
+            };
+
+            const handleImageUpload = (e) => {
+                const file = e.target.files[0]; if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    const img = new Image(); img.src = evt.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                        const MAX = 1024; let w = img.width, h = img.height;
+                        if (w > MAX) { h *= MAX / w; w = MAX; }
+                        canvas.width = w; canvas.height = h; ctx.drawImage(img, 0, 0, w, h);
+                        form.image = canvas.toDataURL('image/jpeg', 0.8);
+                        analyzeOffline(); // Auto trigger offline AI
+                    };
+                };
+                reader.readAsDataURL(file); e.target.value = '';
+            };
+
+            const analyzeOffline = async () => {
+                isAnalyzing.value = true;
+                statusText.value = "Tesseract OCR 掃描文字中...";
+                try {
+                    // 1. Determine Tesseract Language
+                    let tesseractLang = 'eng';
+                    if (settings.currencyCode === 'JPY') tesseractLang = 'jpn';
+                    if (settings.currencyCode === 'KRW') tesseractLang = 'kor';
+                    if (settings.currencyCode === 'CNY') tesseractLang = 'chi_sim';
+                    
+                    const worker = await Tesseract.createWorker(tesseractLang);
+                    const ret = await worker.recognize(form.image);
+                    await worker.terminate();
+                    
+                    const ocrText = ret.data.text;
+                    if(!ocrText || ocrText.length < 5) throw new Error("OCR 無法識別文字，請重拍。");
+
+                    // 2. Parse Text (Advanced Regex)
+                    statusText.value = "分析收據項目...";
+                    const lines = ocrText.split('\n').filter(l => l.trim().length > 1);
+                    const itemsFound = [];
+                    // Regex to find lines ending with numbers (prices)
+                    const priceRegex = /[\d,]+\.?\d*$/; 
+
+                    for(let line of lines) {
+                        const match = line.match(priceRegex);
+                        if(match) {
+                            let priceStr = match[0].replace(/,/g, '');
+                            let price = parseFloat(priceStr);
+                            let name = line.substring(0, match.index).trim();
+                            
+                            // Filtering noise
+                            if (price > 0 && name.length > 1 && !name.toLowerCase().includes('total') && !name.toLowerCase().includes('tax') && !name.toLowerCase().includes('change')) {
+                                itemsFound.push({ nameOrg: name, nameTw: '', price: price, selected: true });
+                            }
+                        }
+                    }
+
+                    if(itemsFound.length > 0) {
+                        detectedItems.value = itemsFound;
+                        // 3. Translation
+                        if(window.TranslationService) {
+                            let targetLang = 'en'; 
+                            if(settings.currencyCode === 'JPY') targetLang = 'ja';
+                            if(settings.currencyCode === 'KRW') targetLang = 'ko';
+                            
+                            if (downloadedModels.value.includes(targetLang)) {
+                                statusText.value = "離線翻譯中...";
+                                const translator = await window.TranslationService.getInstance(targetLang);
+                                
+                                for(let item of detectedItems.value) {
+                                    try {
+                                        // NLLB params
+                                        let opts = {};
+                                        if (targetLang === 'ja') opts = { src_lang: 'jpn_Jpan', tgt_lang: 'zho_Hant' };
+                                        else if (targetLang === 'ko') opts = { src_lang: 'kor_Hang', tgt_lang: 'zho_Hant' };
+                                        
+                                        const output = await translator(item.nameOrg, opts);
+                                        if(output && output[0]) item.nameTw = output[0].translation_text;
+                                    } catch(e) {}
+                                }
+                            }
+                        }
+                    } else {
+                         // Fallback for simple receipt or failed parsing
+                         form.itemOriginal = lines[0] || '';
+                    }
+
+                } catch (e) {
+                    alert("離線辨識錯誤: " + e.message);
+                } finally {
+                    isAnalyzing.value = false;
+                }
+            };
+            
+            const translateItem = async () => {
+                const original = form.itemOriginal.trim();
+                if(!original) return;
+                
+                let targetLang = 'en';
+                if(settings.currencyCode === 'JPY') targetLang = 'ja';
+                if(settings.currencyCode === 'KRW') targetLang = 'ko';
+
+                if (!downloadedModels.value.includes(targetLang)) {
+                    alert(`請先至設定頁面下載 ${targetLang === 'ja' ? '日文' : targetLang === 'ko' ? '韓文' : '英文'} 翻譯模型`);
+                    return;
+                }
+
+                isAnalyzing.value = true;
+                try {
+                    const translator = await window.TranslationService.getInstance(targetLang);
+                    let opts = {};
+                    if (targetLang === 'ja') opts = { src_lang: 'jpn_Jpan', tgt_lang: 'zho_Hant' };
+                    else if (targetLang === 'ko') opts = { src_lang: 'kor_Hang', tgt_lang: 'zho_Hant' };
+                    
+                    const output = await translator(original, opts);
+                    if(output && output[0]) form.itemTw = output[0].translation_text;
+                } catch(e) { console.error(e); } finally { isAnalyzing.value = false; }
+            };
+
+            const saveExpense = () => { 
+                if (!form.itemTw || !form.price) return alert('請輸入完整資訊'); 
+                expenses.value.push({ ...form }); 
+                saveAll(); 
+                closeModal(); 
+            };
+            
+            const deleteExpense = (id) => { 
+                if(confirm('確定刪除?')) { expenses.value = expenses.value.filter(i => i.id !== id); saveAll(); } 
+            };
+            
+            const confirmItems = () => {
+                const selected = detectedItems.value.filter(i => i.selected);
+                selected.forEach((item, idx) => {
+                    expenses.value.push({
+                        id: Date.now() + idx,
+                        date: form.date,
+                        store: form.store,
+                        itemTw: item.nameTw || item.nameOrg,
+                        itemOriginal: item.nameOrg,
+                        price: item.price,
+                        tax: 'inc',
+                        image: form.image,
+                        category: 'shopping'
+                    });
+                });
+                saveAll();
+                closeModal();
+            };
+
+            const renderCharts = () => {
+                if (!expenses.value || expenses.value.length === 0) return;
+                const catCtx = document.getElementById('categoryChart');
+                if (catCtx) {
+                    if (categoryChartInstance) categoryChartInstance.destroy();
+                    const catData = {};
+                    expenses.value.forEach(e => { 
+                        const twd = Math.round(e.price * settings.rate);
+                        catData[e.category] = (catData[e.category] || 0) + twd; 
+                    });
+                    categoryChartInstance = new Chart(catCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: Object.keys(catData).map(k => categories.find(c => c.id === k)?.name || k),
+                            datasets: [{
+                                data: Object.values(catData),
+                                backgroundColor: ['#6366f1', '#facc15', '#3b82f6', '#8b5cf6', '#10b981', '#94a3b8'],
+                                borderWidth: 0
+                            }]
+                        },
+                        options: { maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+                    });
+                }
+                const dayCtx = document.getElementById('dailyChart');
+                if (dayCtx) {
+                    if (dailyChartInstance) dailyChartInstance.destroy();
+                    const dayData = {};
+                    expenses.value.forEach(e => {
+                        const d = e.date.substring(5);
+                        const twd = Math.round(e.price * settings.rate);
+                        dayData[d] = (dayData[d] || 0) + twd;
+                    });
+                    const sortedDates = Object.keys(dayData).sort();
+                    dailyChartInstance = new Chart(dayCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: sortedDates,
+                            datasets: [{
+                                label: '每日支出 (TWD)',
+                                data: sortedDates.map(d => dayData[d]),
+                                backgroundColor: '#a5b4fc',
+                                borderRadius: 4
+                            }]
+                        },
+                        options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+                    });
+                }
+            };
+
+            return {
+                currentTab, showModal, viewingImage, fileInput, isAnalyzing, statusText, 
+                settings, form, currencyCode, groupedExpenses, totalTWD,
+                categories, detectedItems, isConfirmedSelection, selectionTotal,
+                downloadedModels, modelLoading, isDownloadingModel,
+                openAddModal, closeModal, triggerCamera, handleImageUpload, saveExpense, deleteExpense, viewImage,
+                formatCurrency, formatDate, getDayLabel, getDayTotal, getCategoryIcon, confirmItems, clearAllData,
+                saveSettings, downloadModel, translateItem
+            };
+        }
+    }).mount('#app');
 </script>
+
 </body>
 </html>
