@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>綺麗旅帳 - Travel Expense V5.4 (輕量模組版)</title>
+    <title>綺麗旅帳 - Travel Expense V5.5 (模型路徑修復版)</title>
     
     <!-- 核心函式庫 -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -226,7 +226,7 @@
                                 </button>
                             </div>
                             <div v-if="isDownloadingModel" class="mt-2 text-xs text-violet-600 bg-violet-50 p-2 rounded animate-pulse">
-                                正在載入語言模型... 請稍候。
+                                正在自動下載/載入離線翻譯模型... 請稍候 (約 1-2 分鐘)。
                             </div>
                         </div>
 
@@ -325,15 +325,15 @@
                     
                     <div class="space-y-2">
                         <button @click="downloadModel('ja')" class="w-full flex justify-between items-center px-3 py-2 bg-white rounded-lg border border-violet-200 hover:bg-violet-50 transition" :disabled="isDownloadingModel">
-                            <span>🇯🇵 日文 -> 中文</span>
+                            <span>🇯🇵 日文 -> 中文 (NLLB)</span>
                             <span class="text-violet-500 font-bold">{{ isDownloadingModel && currentDownloadTarget === 'ja' ? '下載中...' : '📥 下載' }}</span>
                         </button>
                         <button @click="downloadModel('ko')" class="w-full flex justify-between items-center px-3 py-2 bg-white rounded-lg border border-violet-200 hover:bg-violet-50 transition" :disabled="isDownloadingModel">
-                            <span>🇰🇷 韓文 -> 中文</span>
+                            <span>🇰🇷 韓文 -> 中文 (NLLB)</span>
                             <span class="text-violet-500 font-bold">{{ isDownloadingModel && currentDownloadTarget === 'ko' ? '下載中...' : '📥 下載' }}</span>
                         </button>
                         <button @click="downloadModel('en')" class="w-full flex justify-between items-center px-3 py-2 bg-white rounded-lg border border-violet-200 hover:bg-violet-50 transition" :disabled="isDownloadingModel">
-                            <span>🇺🇸 英文 -> 中文</span>
+                            <span>🇺🇸 英文 -> 中文 (Opus-MT)</span>
                             <span class="text-violet-500 font-bold">{{ isDownloadingModel && currentDownloadTarget === 'en' ? '下載中...' : '📥 下載' }}</span>
                         </button>
                     </div>
@@ -398,20 +398,29 @@
     // Singleton for translation pipeline
     class TranslationService {
         static instances = {}; // Store by lang: 'ja', 'ko', 'en'
+        static types = {}; // Store model type 'nllb' or 'opus'
 
         static async getInstance(lang, progressCallback) {
             if (!this.instances[lang]) {
-                // Map lang to model
-                let modelID = 'Xenova/opus-mt-en-zh'; // Default fallback
-                if (lang === 'ja') modelID = 'Xenova/opus-mt-ja-zh';
-                if (lang === 'ko') modelID = 'Xenova/opus-mt-ko-zh'; // Assuming availability, or use fallback
-                if (lang === 'en') modelID = 'Xenova/opus-mt-en-zh';
+                let modelID;
+                if (lang === 'ja' || lang === 'ko') {
+                    // Use NLLB for Asian languages (more reliable)
+                    modelID = 'Xenova/nllb-200-distilled-600M';
+                    this.types[lang] = 'nllb';
+                } else {
+                    // Use Opus for English
+                    modelID = 'Xenova/opus-mt-en-zh';
+                    this.types[lang] = 'opus';
+                }
 
                 this.instances[lang] = await pipeline('translation', modelID, {
                     progress_callback: progressCallback
                 });
             }
-            return this.instances[lang];
+            return {
+                translator: this.instances[lang],
+                type: this.types[lang]
+            };
         }
     }
 
@@ -620,13 +629,12 @@
                         modelLoading.text = "模型準備中...";
                         modelLoading.total = 100; modelLoading.loaded = 1; 
                         
-                        let targetLang = 'en'; // default fallback
+                        let targetLang = 'en'; 
                         if(settings.currencyCode === 'JPY') targetLang = 'ja';
                         if(settings.currencyCode === 'KRW') targetLang = 'ko';
 
-                        // Check if we have a model for this
-                        // (User must have downloaded it first via Settings, or it will download now)
-                        const translator = await window.TranslationService.getInstance(targetLang, (progress) => {
+                        // Get instance with type info
+                        const { translator, type } = await window.TranslationService.getInstance(targetLang, (progress) => {
                             if(progress.status === 'progress' && progress.total) {
                                 modelLoading.text = `載入中: ${progress.file}`;
                                 modelLoading.loaded = progress.loaded;
@@ -635,7 +643,22 @@
                         });
 
                         modelLoading.text = "正在翻譯...";
-                        const output = await translator(original);
+                        
+                        // Handle NLLB specialized inputs
+                        let output;
+                        if (type === 'nllb') {
+                            let src_lang_code = 'eng_Latn';
+                            if (targetLang === 'ja') src_lang_code = 'jpn_Jpan';
+                            if (targetLang === 'ko') src_lang_code = 'kor_Hang';
+                            
+                            output = await translator(original, {
+                                src_lang: src_lang_code,
+                                tgt_lang: 'zho_Hant'
+                            });
+                        } else {
+                            // Standard Opus-MT
+                            output = await translator(original);
+                        }
                         
                         if(output && output[0]) {
                             form.itemTw = output[0].translation_text;
