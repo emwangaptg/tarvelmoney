@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>綺麗旅帳 - Travel Expense V2.4</title>
+    <title>綺麗旅帳 - Travel Expense V2.5 (診斷版)</title>
     
     <!-- 核心函式庫 -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -67,7 +67,7 @@
         </div>
         <button @click="showSettings = true" class="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-rose-400 hover:bg-rose-50 transition relative">
             <i class="fa-solid fa-gear"></i>
-            <span v-if="!settings.apiKey" class="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>
+            <span v-if="!settings.apiKey" class="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-ping"></span>
         </button>
     </header>
 
@@ -130,7 +130,7 @@
         </div>
     </main>
 
-    <!-- FAB -->
+    <!-- FAB (Updated Position to bottom-32) -->
     <button @click="openAddModal" class="absolute bottom-32 right-6 w-14 h-14 rounded-full btn-pink flex items-center justify-center text-2xl shadow-xl z-20 hover:scale-110 transition-transform">
         <i class="fa-solid fa-camera"></i>
     </button>
@@ -152,7 +152,7 @@
                                 <i class="fa-regular fa-image"></i>
                             </div>
                             <span class="text-sm font-bold">拍照 或 從相簿上傳</span>
-                            <span class="text-xs text-rose-300 mt-1">(支援 AI 自動辨識)</span>
+                            <span class="text-xs text-rose-300 mt-1">(AI 自動辨識)</span>
                         </div>
                         <div v-else class="relative w-full h-48 rounded-2xl overflow-hidden shadow-sm bg-black/5">
                             <img :src="form.image" class="w-full h-full object-contain">
@@ -160,19 +160,19 @@
                                 <i class="fa-solid fa-rotate mr-1"></i> 重選
                             </button>
                             <!-- Analyzing Overlay -->
-                            <div v-if="isAnalyzing" class="absolute inset-0 bg-white/60 z-20 flex flex-col items-center justify-center backdrop-blur-sm">
-                                <span class="loader mb-2"></span>
-                                <span class="text-rose-500 font-bold text-sm">{{ statusText }}</span>
+                            <div v-if="isAnalyzing" class="absolute inset-0 bg-white/80 z-20 flex flex-col items-center justify-center backdrop-blur-sm text-center px-4">
+                                <span class="loader mb-3"></span>
+                                <span class="text-rose-500 font-bold text-base mb-1">AI 正在讀取收據...</span>
+                                <span class="text-xs text-gray-500">{{ statusText }}</span>
                             </div>
                         </div>
-                        <!-- Input -->
                         <input type="file" ref="fileInput" accept="image/*" class="hidden" @change="handleImageUpload">
                     </div>
 
                     <!-- AI Retry Button -->
                     <button v-if="form.image && !isAnalyzing" @click="analyzeReceipt" class="w-full mb-4 py-2 bg-gradient-to-r from-violet-50 to-fuchsia-50 text-violet-600 rounded-xl text-xs font-bold border border-violet-100 hover:brightness-95 transition flex items-center justify-center gap-2">
                         <i class="fa-solid fa-wand-magic-sparkles"></i> 
-                        {{ settings.apiKey ? '重新執行 AI 辨識' : '請先設定 API Key' }}
+                        {{ settings.apiKey ? '重新執行 AI 辨識' : '請先至設定填寫 API Key' }}
                     </button>
 
                     <!-- Form Fields -->
@@ -217,7 +217,19 @@
                 <div class="bg-rose-50 p-3 rounded-xl border border-rose-100">
                     <label class="text-xs font-bold text-rose-600 mb-1 block"><i class="fa-solid fa-key mr-1"></i>Google Gemini API Key</label>
                     <input type="password" v-model="settings.apiKey" placeholder="貼上 API Key (AIza...)" class="input-elegant text-sm">
-                    <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-[10px] text-rose-400 underline mt-1 block text-right">免費申請 Key</a>
+                    <div class="flex justify-between items-center mt-2">
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-[10px] text-rose-400 underline">免費申請 Key</a>
+                        <button @click="testAPIConnection" class="text-[10px] bg-white border border-rose-200 text-rose-500 px-2 py-1 rounded hover:bg-rose-50" :disabled="isTesting">
+                            {{ isTesting ? '測試中...' : '測試連線' }}
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 mb-1 block">AI 模型版本</label>
+                    <select v-model="settings.model" class="input-elegant bg-white">
+                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (快速/省額度)</option>
+                        <option value="gemini-1.5-pro">Gemini 1.5 Pro (精準/較慢)</option>
+                    </select>
                 </div>
                 <div>
                     <label class="text-xs font-bold text-gray-500 mb-1 block">當地貨幣</label>
@@ -229,7 +241,22 @@
                 </div>
                 <div><label class="text-xs font-bold text-gray-500 mb-1 block">匯率 (1 當地幣 = ? 台幣)</label><input type="number" v-model.number="settings.rate" step="0.0001" class="input-elegant font-bold text-rose-500"></div>
             </div>
-            <button @click="saveSettings" class="w-full mt-6 py-3 rounded-xl btn-pink font-bold">儲存</button>
+            <button @click="saveSettings" class="w-full mt-6 py-3 rounded-xl btn-pink font-bold">儲存設定</button>
+        </div>
+    </div>
+
+    <!-- Error Modal -->
+    <div v-if="errorModal.show" class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-6">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-bounce-in">
+            <div class="text-center mb-4">
+                <i class="fa-solid fa-triangle-exclamation text-4xl text-amber-400 mb-2"></i>
+                <h3 class="text-lg font-bold text-slate-800">哎呀！出錯了</h3>
+            </div>
+            <div class="bg-gray-100 p-3 rounded-lg text-xs font-mono text-gray-600 mb-4 break-words max-h-32 overflow-y-auto">
+                {{ errorModal.message }}
+            </div>
+            <p class="text-sm text-gray-500 mb-4 text-center">請檢查 API Key 是否正確，或嘗試切換 AI 模型。</p>
+            <button @click="errorModal.show = false" class="w-full py-2 rounded-xl bg-slate-100 text-slate-600 font-bold">關閉</button>
         </div>
     </div>
 
@@ -251,9 +278,18 @@
             const viewingImage = ref(null);
             const fileInput = ref(null);
             const isAnalyzing = ref(false);
+            const isTesting = ref(false);
             const statusText = ref('');
             
-            const settings = reactive({ rate: 0.2150, currencyCode: 'JPY', apiKey: '' });
+            const errorModal = reactive({ show: false, message: '' });
+
+            const settings = reactive({
+                rate: 0.2150,
+                currencyCode: 'JPY',
+                apiKey: '',
+                model: 'gemini-1.5-flash'
+            });
+
             const expenses = ref([]);
             
             const form = reactive({ id: null, date: '', store: '', itemTw: '', itemOriginal: '', price: '', tax: 'inc', image: null });
@@ -283,14 +319,43 @@
             const closeModal = () => showModal.value = false;
             const saveSettings = () => { saveAll(); showSettings.value = false; };
             const triggerCamera = () => fileInput.value.click();
+            const viewImage = (src) => { if(src) viewingImage.value = src; };
 
             const cleanJsonString = (str) => {
-                const match = str.match(/\{[\s\S]*\}/);
-                return match ? match[0] : str;
+                let cleaned = str.replace(/```json/g, '').replace(/```/g, '');
+                const firstOpen = cleaned.indexOf('{');
+                const lastClose = cleaned.lastIndexOf('}');
+                if (firstOpen !== -1 && lastClose !== -1) {
+                    cleaned = cleaned.substring(firstOpen, lastClose + 1);
+                }
+                return cleaned;
+            };
+
+            const testAPIConnection = async () => {
+                if (!settings.apiKey) { alert("請先輸入 API Key"); return; }
+                isTesting.value = true;
+                try {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:generateContent?key=${settings.apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: [{ parts: [{ text: "Hello" }] }] })
+                    });
+                    const data = await response.json();
+                    if(data.error) throw new Error(data.error.message);
+                    alert("✅ 連線成功！API Key 有效。");
+                } catch (e) {
+                    alert("❌ 連線失敗：" + e.message);
+                } finally {
+                    isTesting.value = false;
+                }
             };
 
             const analyzeReceipt = async () => {
-                if (!settings.apiKey) { alert("請先至設定輸入 API Key"); return; }
+                if (!settings.apiKey) { 
+                    errorModal.message = "未設定 API Key，無法進行辨識。";
+                    errorModal.show = true;
+                    return; 
+                }
                 if (!form.image) return;
 
                 isAnalyzing.value = true;
@@ -299,22 +364,21 @@
                 try {
                     const base64Image = form.image.split(',')[1];
                     const prompt = `
-                        請扮演一個收據辨識專家。請分析這張圖片，並以繁體中文 (Traditional Chinese) 回傳一個純 JSON 物件。
+                        你是一個專業的旅遊收據辨識助手。
+                        請分析這張收據圖片，目標貨幣是: ${settings.currencyCode}。
                         
-                        重點：主要提取「金額」與「品項」。若店名或日期沒拍到，請留空字串，不要報錯。
+                        請擷取以下資訊，若圖片模糊或找不到，請回傳空字串，不要自行編造：
+                        1. store: 店家名稱 (原文)。
+                        2. itemOriginal: 最主要的消費品項名稱 (原文)。
+                        3. itemTw: 將品項名稱翻譯成繁體中文 (台灣用語)。
+                        4. price: 總金額 (純數字，移除貨幣符號與千分位逗號)。
+                        5. date: 交易日期 (YYYY-MM-DD)。
 
-                        你需要提取：
-                        1. store: 店家名稱 (原文)。若無法辨識請回傳空字串。
-                        2. itemOriginal: 最主要的商品名稱 (原文)。
-                        3. itemTw: 將上述商品名稱翻譯成台灣繁體中文 (精簡)。
-                        4. price: 總金額 (純數字，不要符號，移除逗號)。
-                        5. date: 交易日期 (格式 YYYY-MM-DD)。若無法辨識請回傳空字串。
-
-                        請務必只回傳 JSON 字串，不要有任何 Markdown 標記或解釋文字。格式如下：
+                        請務必只回傳純 JSON 字串，不要包含 markdown 標籤：
                         {"store": "...", "itemOriginal": "...", "itemTw": "...", "price": 0, "date": "..."}
                     `;
 
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${settings.apiKey}`, {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:generateContent?key=${settings.apiKey}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -330,28 +394,34 @@
 
                     const data = await response.json();
                     
-                    if (data.error) throw new Error(data.error.message);
-                    if (!data.candidates || !data.candidates[0].content) throw new Error("AI 無法辨識此圖片 (可能是安全阻擋或圖片不清)");
+                    if (data.error) throw new Error(`API Error: ${data.error.message} (Code: ${data.error.code})`);
+                    if (!data.candidates || !data.candidates[0].content) throw new Error("AI 回傳內容為空，可能圖片無法辨識。");
 
                     statusText.value = "資料解析中...";
                     const rawText = data.candidates[0].content.parts[0].text;
-                    console.log("AI Raw:", rawText); 
-
                     const jsonStr = cleanJsonString(rawText);
-                    const result = JSON.parse(jsonStr);
+                    
+                    let result;
+                    try {
+                        result = JSON.parse(jsonStr);
+                    } catch (e) {
+                        console.error("JSON Parse Error:", rawText);
+                        throw new Error("AI 回傳格式無法解析，請重試。");
+                    }
 
                     form.store = result.store || '';
                     form.itemTw = result.itemTw || '';
                     form.itemOriginal = result.itemOriginal || '';
                     if (result.price) {
-                        const priceStr = String(result.price).replace(/,/g, '');
+                        const priceStr = String(result.price).replace(/[^0-9.]/g, ''); 
                         form.price = parseFloat(priceStr) || 0;
                     }
                     if (result.date) form.date = result.date;
                     
                 } catch (error) {
                     console.error(error);
-                    alert(`辨識失敗: ${error.message}\n請檢查 API Key 是否正確。`);
+                    errorModal.message = error.message;
+                    errorModal.show = true;
                 } finally {
                     isAnalyzing.value = false;
                 }
@@ -388,7 +458,6 @@
             };
 
             const deleteExpense = (id) => { if(confirm('刪除?')) { expenses.value = expenses.value.filter(i => i.id !== id); saveAll(); } };
-            const viewImage = (src) => { if(src) viewingImage.value = src; };
 
             const currencyCode = computed(() => settings.currencyCode);
             const totalTWD = computed(() => expenses.value.reduce((sum, item) => sum + Math.round(item.price * settings.rate), 0));
@@ -408,10 +477,10 @@
             const getDayTotal = (items) => items.reduce((sum, item) => sum + Math.round(item.price * settings.rate), 0);
 
             return {
-                showModal, showSettings, viewingImage, fileInput, isAnalyzing, statusText,
+                showModal, showSettings, viewingImage, fileInput, isAnalyzing, statusText, isTesting, errorModal,
                 settings, form, currencyCode, groupedExpenses, totalTWD,
                 openAddModal, closeModal, triggerCamera, handleImageUpload, analyzeReceipt, saveExpense, saveSettings, deleteExpense, viewImage,
-                formatCurrency, formatDate, getDayLabel, getDayTotal
+                testAPIConnection, formatCurrency, formatDate, getDayLabel, getDayTotal
             };
         }
     }).mount('#app');
