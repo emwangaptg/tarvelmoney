@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>綺麗旅帳 - Travel Expense V5.7 (離線OCR整合版)</title>
+    <title>綺麗旅帳 - Travel Expense V5.8 (多品項辨識版)</title>
     
     <!-- 核心函式庫 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <!-- Tesseract.js for OCR -->
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -56,9 +55,14 @@
         .tag-exc { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
         .receipt-thumb { width: 60px; height: 60px; border-radius: 12px; object-fit: cover; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         
-        .loader { width: 24px; height: 24px; border: 3px solid #fecdd3; border-bottom-color: #f43f5e; border-radius: 50%; display: inline-block; animation: rotation 1s linear infinite; }
+        /* Loading Animation */
+        .loader {
+            width: 24px; height: 24px; border: 3px solid #fecdd3; border-bottom-color: #f43f5e;
+            border-radius: 50%; display: inline-block; animation: rotation 1s linear infinite;
+        }
         @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
+        /* Transitions */
         .modal-enter-active, .modal-leave-active { transition: opacity 0.3s ease; }
         .modal-enter-from, .modal-leave-to { opacity: 0; }
         .slide-up-enter-active, .slide-up-leave-active { transition: transform 0.3s ease; }
@@ -66,6 +70,11 @@
 
         .progress-bar { width: 100%; height: 6px; background-color: #e5e7eb; border-radius: 99px; overflow: hidden; margin-top: 8px; }
         .progress-fill { height: 100%; background-color: #db2777; transition: width 0.3s ease; }
+        
+        /* Item Selection List */
+        .item-row { border-bottom: 1px dashed #fecdd3; padding: 8px 0; display: flex; align-items: center; }
+        .item-row:last-child { border-bottom: none; }
+        .checkbox-custom { width: 18px; height: 18px; accent-color: #f43f5e; margin-right: 10px; }
     </style>
 </head>
 <body>
@@ -144,76 +153,102 @@
             <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeModal"></div>
             <transition name="slide-up">
                 <div v-if="showModal" class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-2xl p-6 relative z-40 max-h-[90vh] overflow-y-auto flex flex-col shadow-2xl">
-                    <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
-                    <h2 class="text-xl font-bold text-slate-800 mb-4 text-center">紀錄美好消費</h2>
-
-                    <!-- Image Preview Area -->
-                    <div class="mb-4 relative group">
-                        <div v-if="!form.image" class="w-full h-40 bg-rose-50 rounded-2xl border-2 border-dashed border-rose-200 flex flex-col items-center justify-center text-rose-300 cursor-pointer hover:bg-rose-100 transition" @click="triggerCamera">
-                            <div class="flex gap-4 text-3xl mb-2"><i class="fa-solid fa-camera"></i><i class="fa-regular fa-image"></i></div>
-                            <span class="text-sm font-bold">拍照 或 從相簿上傳</span>
-                            <span class="text-xs text-rose-300 mt-1">(支援 {{ getProviderName() }} 自動辨識)</span>
-                        </div>
-                        <div v-else class="relative w-full h-48 rounded-2xl overflow-hidden shadow-sm bg-black/5">
-                            <img :src="form.image" class="w-full h-full object-contain">
-                            <button @click="triggerCamera" class="absolute bottom-2 right-2 bg-white/80 p-2 rounded-full text-gray-600 text-sm font-bold shadow hover:bg-white z-10"><i class="fa-solid fa-rotate mr-1"></i> 重選</button>
-                             <!-- Analyzing Overlay -->
-                            <div v-if="isAnalyzing" class="absolute inset-0 bg-white/80 z-20 flex flex-col items-center justify-center backdrop-blur-sm text-center px-4">
-                                <span class="loader mb-3"></span>
-                                <span class="text-rose-500 font-bold text-base mb-1">{{ isOfflineOCR ? '離線 OCR 分析中...' : (getProviderName() + ' 正在讀取收據...') }}</span>
-                                <span class="text-xs text-gray-500 block whitespace-pre-wrap">{{ statusText }}</span>
+                    
+                    <!-- Detected Items Selection View -->
+                    <div v-if="detectedItems.length > 0 && !isConfirmedSelection" class="flex flex-col h-full">
+                        <h3 class="text-lg font-bold text-slate-800 mb-2">請選擇要記帳的項目</h3>
+                        <p class="text-xs text-gray-500 mb-4">AI 偵測到以下商品，請勾選要加入的項目：</p>
+                        
+                        <div class="flex-1 overflow-y-auto pr-2 mb-4 border border-rose-100 rounded-xl p-2 bg-rose-50/50">
+                            <div v-for="(item, idx) in detectedItems" :key="idx" class="item-row">
+                                <input type="checkbox" v-model="item.selected" class="checkbox-custom">
+                                <div class="flex-1 min-w-0">
+                                    <div class="font-bold text-sm text-slate-700 truncate">{{ item.nameTw }}</div>
+                                    <div class="text-xs text-gray-400 truncate">{{ item.nameOrg }}</div>
+                                </div>
+                                <div class="font-mono font-bold text-rose-500 text-sm ml-2">{{ item.price }}</div>
                             </div>
-                        </div>
-                        <input type="file" ref="fileInput" accept="image/*" class="hidden" @change="handleImageUpload">
-                    </div>
-
-                    <!-- AI/OCR Retry Button -->
-                    <button v-if="form.image && !isAnalyzing" @click="analyzeReceipt" class="w-full mb-4 py-2 bg-gradient-to-r from-violet-50 to-fuchsia-50 text-violet-600 rounded-xl text-xs font-bold border border-violet-100 hover:brightness-95 transition flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-wand-magic-sparkles"></i> 
-                        {{ isOfflineOCR ? '執行離線 OCR 辨識' : (isKeyConfigured ? '重新執行 AI 辨識' : '請先設定 API Key') }}
-                    </button>
-
-                    <!-- Form Fields -->
-                    <div class="space-y-4">
-                        <div class="grid grid-cols-2 gap-4">
-                            <div><label class="text-xs font-bold text-gray-500 mb-1 block">日期</label><input type="date" v-model="form.date" class="input-elegant"></div>
-                            <div><label class="text-xs font-bold text-gray-500 mb-1 block">店舖名稱</label><input type="text" v-model="form.store" class="input-elegant"></div>
                         </div>
                         
-                        <!-- Item Name with Translation -->
-                        <div>
-                            <label class="text-xs font-bold text-gray-500 mb-1 block">原文品名 (選填)</label>
-                            <div class="flex gap-2">
-                                <input type="text" v-model="form.itemOriginal" class="input-elegant text-sm text-gray-500 flex-1" placeholder="輸入原文自動翻譯">
-                                <button v-if="!isAIProvider" @click="translateItem" class="bg-blue-50 text-blue-600 px-3 rounded-xl border border-blue-100 hover:bg-blue-100 transition whitespace-nowrap text-sm font-bold"><i class="fa-solid fa-language mr-1"></i>翻譯</button>
-                            </div>
-                            <div v-if="isDownloadingModel" class="mt-2 text-xs text-violet-600 bg-violet-50 p-2 rounded animate-pulse">正在自動下載/載入離線翻譯模型... 請稍候 (約 1-2 分鐘)。</div>
+                        <div class="flex justify-between items-center text-sm font-bold text-slate-700 bg-gray-100 p-3 rounded-xl mb-4">
+                            <span>合計</span>
+                            <span class="text-rose-500">{{ formatCurrency(selectionTotal) }} {{ currencyCode }}</span>
                         </div>
 
-                        <div>
-                            <label class="text-xs font-bold text-gray-500 mb-1 block">品項名稱 (繁中)</label>
-                            <input type="text" v-model="form.itemTw" class="input-elegant" placeholder="輸入或由上方自動翻譯">
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-4">
-                            <div><label class="text-xs font-bold text-gray-500 mb-1 block">金額 ({{currencyCode}})</label><input type="number" v-model.number="form.price" class="input-elegant font-mono text-lg font-bold text-rose-500"></div>
-                            <div>
-                                <label class="text-xs font-bold text-gray-500 mb-1 block">稅務</label>
-                                <div class="flex bg-gray-100 p-1 rounded-xl h-[46px]">
-                                    <button @click="form.tax = 'inc'" :class="['flex-1 rounded-lg text-xs font-bold transition', form.tax === 'inc' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-400']">含稅</button>
-                                    <button @click="form.tax = 'exc'" :class="['flex-1 rounded-lg text-xs font-bold transition', form.tax === 'exc' ? 'bg-white text-red-500 shadow-sm' : 'text-gray-400']">未稅</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="bg-gray-50 p-3 rounded-xl flex justify-between items-center">
-                            <span class="text-xs text-gray-500">換算台幣 (約)</span>
-                            <span class="font-bold text-slate-700">NT$ {{ formatCurrency(Math.round(form.price * settings.rate)) }}</span>
+                        <div class="flex gap-3">
+                            <button @click="detectedItems = []" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-500 font-bold bg-white">取消</button>
+                            <button @click="confirmItems" class="flex-[2] py-3 rounded-xl btn-pink font-bold shadow-lg shadow-rose-200">確認選取</button>
                         </div>
                     </div>
 
-                    <div class="mt-8 flex gap-3">
-                        <button @click="closeModal" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-500 font-bold bg-white">取消</button>
-                        <button @click="saveExpense" class="flex-[2] py-3 rounded-xl btn-pink font-bold shadow-lg shadow-rose-200" :disabled="isAnalyzing">確認記帳</button>
+                    <!-- Standard Form View -->
+                    <div v-else>
+                        <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
+                        <h2 class="text-xl font-bold text-slate-800 mb-4 text-center">紀錄美好消費</h2>
+
+                        <div class="mb-4 relative group">
+                            <div v-if="!form.image" class="w-full h-40 bg-rose-50 rounded-2xl border-2 border-dashed border-rose-200 flex flex-col items-center justify-center text-rose-300 cursor-pointer hover:bg-rose-100 transition" @click="triggerCamera">
+                                <div class="flex gap-4 text-3xl mb-2"><i class="fa-solid fa-camera"></i><i class="fa-regular fa-image"></i></div>
+                                <span class="text-sm font-bold">拍照 或 從相簿上傳</span>
+                                <span class="text-xs text-rose-300 mt-1">(支援多品項辨識)</span>
+                            </div>
+                            <div v-else class="relative w-full h-48 rounded-2xl overflow-hidden shadow-sm bg-black/5">
+                                <img :src="form.image" class="w-full h-full object-contain">
+                                <button @click="triggerCamera" class="absolute bottom-2 right-2 bg-white/80 p-2 rounded-full text-gray-600 text-sm font-bold shadow hover:bg-white z-10"><i class="fa-solid fa-rotate mr-1"></i> 重選</button>
+                                <div v-if="isAnalyzing" class="absolute inset-0 bg-white/80 z-20 flex flex-col items-center justify-center backdrop-blur-sm text-center px-4">
+                                    <span class="loader mb-3"></span>
+                                    <span class="text-rose-500 font-bold text-base mb-1">{{ isOfflineOCR ? '離線 OCR 分析中...' : (getProviderName() + ' 正在讀取收據...') }}</span>
+                                    <span class="text-xs text-gray-500 block whitespace-pre-wrap">{{ statusText }}</span>
+                                </div>
+                            </div>
+                            <input type="file" ref="fileInput" accept="image/*" class="hidden" @change="handleImageUpload">
+                        </div>
+
+                        <button v-if="isAIProvider && form.image && !isAnalyzing" @click="analyzeReceipt" class="w-full mb-4 py-2 bg-gradient-to-r from-violet-50 to-fuchsia-50 text-violet-600 rounded-xl text-xs font-bold border border-violet-100 hover:brightness-95 transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> 
+                            {{ isKeyConfigured ? '重新執行 AI 辨識' : '請先設定 API Key' }}
+                        </button>
+
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="text-xs font-bold text-gray-500 mb-1 block">日期</label><input type="date" v-model="form.date" class="input-elegant"></div>
+                                <div><label class="text-xs font-bold text-gray-500 mb-1 block">店舖名稱</label><input type="text" v-model="form.store" class="input-elegant"></div>
+                            </div>
+                            
+                            <div>
+                                <label class="text-xs font-bold text-gray-500 mb-1 block">原文品名 (選填)</label>
+                                <div class="flex gap-2">
+                                    <input type="text" v-model="form.itemOriginal" class="input-elegant text-sm text-gray-500 flex-1" placeholder="輸入原文自動翻譯">
+                                    <button v-if="!isAIProvider" @click="translateItem" class="bg-blue-50 text-blue-600 px-3 rounded-xl border border-blue-100 hover:bg-blue-100 transition whitespace-nowrap text-sm font-bold"><i class="fa-solid fa-language mr-1"></i>翻譯</button>
+                                </div>
+                                <div v-if="isDownloadingModel" class="mt-2 text-xs text-violet-600 bg-violet-50 p-2 rounded animate-pulse">正在自動下載/載入離線翻譯模型... 請稍候 (約 1-2 分鐘)。</div>
+                            </div>
+
+                            <div>
+                                <label class="text-xs font-bold text-gray-500 mb-1 block">品項名稱 (繁中)</label>
+                                <input type="text" v-model="form.itemTw" class="input-elegant" placeholder="輸入或由上方自動翻譯">
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="text-xs font-bold text-gray-500 mb-1 block">金額 ({{currencyCode}})</label><input type="number" v-model.number="form.price" class="input-elegant font-mono text-lg font-bold text-rose-500"></div>
+                                <div>
+                                    <label class="text-xs font-bold text-gray-500 mb-1 block">稅務</label>
+                                    <div class="flex bg-gray-100 p-1 rounded-xl h-[46px]">
+                                        <button @click="form.tax = 'inc'" :class="['flex-1 rounded-lg text-xs font-bold transition', form.tax === 'inc' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-400']">含稅</button>
+                                        <button @click="form.tax = 'exc'" :class="['flex-1 rounded-lg text-xs font-bold transition', form.tax === 'exc' ? 'bg-white text-red-500 shadow-sm' : 'text-gray-400']">未稅</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-gray-50 p-3 rounded-xl flex justify-between items-center">
+                                <span class="text-xs text-gray-500">換算台幣 (約)</span>
+                                <span class="font-bold text-slate-700">NT$ {{ formatCurrency(Math.round(form.price * settings.rate)) }}</span>
+                            </div>
+                        </div>
+
+                        <div class="mt-8 flex gap-3">
+                            <button @click="closeModal" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-500 font-bold bg-white">取消</button>
+                            <button @click="saveExpense" class="flex-[2] py-3 rounded-xl btn-pink font-bold shadow-lg shadow-rose-200" :disabled="isAnalyzing">確認記帳</button>
+                        </div>
                     </div>
                 </div>
             </transition>
@@ -226,7 +261,6 @@
             <button @click="saveSettings" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><i class="fa-solid fa-times text-xl"></i></button>
             <h3 class="text-lg font-bold text-slate-800 mb-4 text-center">旅程設定</h3>
             <div class="space-y-5">
-                
                 <div>
                     <label class="text-xs font-bold text-gray-500 mb-2 block">辨識/翻譯方式</label>
                     <div class="grid grid-cols-2 gap-2 bg-slate-50 p-1 rounded-xl">
@@ -270,8 +304,7 @@
                 </div>
                 
                 <div v-if="settings.provider === 'offline_ai'" class="bg-violet-50 p-3 rounded-xl border border-violet-100 animate-fade-in text-xs text-violet-700">
-                    <p class="font-bold mb-2"><i class="fa-solid fa-robot mr-1"></i> 離線 AI (OCR + 翻譯)</p>
-                    <p class="mb-3">請依需求下載對應的語言模組。首次使用需等待下載。</p>
+                    <p class="font-bold mb-2"><i class="fa-solid fa-download mr-1"></i> 輕量化離線翻譯 (Opus-MT)</p>
                     <div class="space-y-2">
                         <button @click="downloadModel('ja')" :class="['w-full flex justify-between items-center px-3 py-2 rounded-lg border transition', downloadedModels.includes('ja') ? 'bg-green-50 border-green-200' : 'bg-white border-violet-200 hover:bg-violet-50']" :disabled="isDownloadingModel">
                             <span>🇯🇵 日文 -> 中文</span><span :class="downloadedModels.includes('ja') ? 'text-green-600 font-bold' : 'text-violet-500 font-bold'">{{ downloadedModels.includes('ja') ? '✅ 已下載' : (isDownloadingModel && currentDownloadTarget === 'ja' ? '下載中...' : '📥 下載') }}</span>
@@ -309,7 +342,6 @@
     <div v-if="viewingImage" class="fixed inset-0 bg-black/90 z-[60] flex flex-col justify-center items-center p-4" @click="viewingImage = null"><img :src="viewingImage" class="max-w-full max-h-[80vh] object-contain rounded-lg"><p class="text-white/70 text-sm mt-4">點擊任意處關閉</p></div>
 </div>
 
-<!-- Transformers.js & Tesseract.js script import -->
 <script type="module">
     import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.14.0';
     env.allowLocalModels = false;
@@ -322,9 +354,11 @@
             if (!this.instances[lang]) {
                 let modelID;
                 if (lang === 'ja' || lang === 'ko') {
+                    // Use NLLB for Asian (Reliable)
                     modelID = 'Xenova/nllb-200-distilled-600M';
                     this.types[lang] = 'nllb';
                 } else {
+                    // Opus for English
                     modelID = 'Xenova/opus-mt-en-zh';
                     this.types[lang] = 'opus';
                 }
@@ -354,6 +388,10 @@
             const downloadedModels = ref([]);
             const modelLoading = reactive({ loaded: 0, total: 0, text: '' });
             const errorModal = reactive({ show: false, message: '' });
+            
+            // New state for multi-item selection
+            const detectedItems = ref([]);
+            const isConfirmedSelection = ref(false);
 
             const settings = reactive({
                 rate: 0.2150,
@@ -394,6 +432,8 @@
                     store: '', itemTw: '', itemOriginal: '', price: '', tax: 'inc', image: null
                 });
                 modelLoading.total = 0;
+                detectedItems.value = [];
+                isConfirmedSelection.value = false;
             };
 
             const openAddModal = () => { resetForm(); showModal.value = true; };
@@ -429,13 +469,25 @@
 
             const getPrompt = () => `
                 You are a travel expense assistant. Analyze this receipt image for currency: ${settings.currencyCode}.
-                Extract info into valid JSON only. No markdown.
-                Fields: store, itemOriginal (Main item), itemTw (Translate item name to Traditional Chinese), price (number), date (YYYY-MM-DD).
-                Example: {"store":"7-11","itemOriginal":"Coffee","itemTw":"咖啡","price":500,"date":"2023-10-10"}
-                If field not found, use empty string/0.
+                Identify ALL purchased items.
+                
+                Important:
+                1. Filter out non-product lines like 'Subtotal', 'Tax', 'Change', 'Total'.
+                2. Price should be pure number (remove currency symbol like '¥', '円', commas).
+                3. Translate item names to Traditional Chinese.
+
+                Return pure JSON object with strict format:
+                {
+                  "store": "Store Name",
+                  "date": "YYYY-MM-DD",
+                  "items": [
+                     { "nameOrg": "Original Name", "nameTw": "Chinese Name", "price": 100 },
+                     { "nameOrg": "Original Name 2", "nameTw": "Chinese Name 2", "price": 200 }
+                  ]
+                }
+                If field not found, use empty/0.
             `;
 
-            // Online API Calls (Same as before)
             const callGemini = async (base64Image) => {
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${settings.geminiModel}:generateContent?key=${settings.geminiKey}`;
                 const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: getPrompt() }, { inline_data: { mime_type: "image/jpeg", data: base64Image } }] }], safetySettings: [{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }] }) });
@@ -469,21 +521,55 @@
                 if (settings.provider !== 'offline_ai' && !isKeyConfigured.value) { errorModal.message = "未設定對應的 API Key。"; errorModal.show = true; return; }
                 if (!form.image) return;
                 isAnalyzing.value = true; 
+                statusText.value = `呼叫 ${getProviderName()} 分析中...`;
 
                 try {
                     if (settings.provider === 'offline_ai') {
                          await analyzeOffline();
                     } else {
-                        statusText.value = `呼叫 ${getProviderName()} 分析中...`;
                         const base64Image = form.image.split(',')[1];
                         let rawText = settings.provider === 'gemini' ? await callGemini(base64Image) : await callOpenAI(base64Image);
                         statusText.value = "資料解析中...";
                         const result = JSON.parse(cleanJsonString(rawText));
-                        form.store = result.store || ''; form.itemTw = result.itemTw || ''; form.itemOriginal = result.itemOriginal || '';
-                        if (result.price) { form.price = parseFloat(String(result.price).replace(/[^0-9.]/g, '')) || 0; }
+                        
+                        form.store = result.store || '';
                         if (result.date) form.date = result.date;
+
+                        // Process Items
+                        if (result.items && Array.isArray(result.items) && result.items.length > 0) {
+                            // Map AI result to our selection format
+                            detectedItems.value = result.items.map(i => ({
+                                nameOrg: i.nameOrg || i.itemOriginal || '',
+                                nameTw: i.nameTw || i.itemTw || '',
+                                price: parseFloat(String(i.price).replace(/[^0-9.]/g, '')) || 0,
+                                selected: true
+                            }));
+                        } else {
+                            // Fallback to single item if AI structure failed
+                            form.itemTw = result.itemTw || '';
+                            form.itemOriginal = result.itemOriginal || '';
+                            if (result.price) { form.price = parseFloat(String(result.price).replace(/[^0-9.]/g, '')) || 0; }
+                        }
                     }
                 } catch (error) { console.error(error); errorModal.message = error.message; errorModal.show = true; } finally { isAnalyzing.value = false; }
+            };
+            
+            // --- Selection Logic ---
+            const selectionTotal = computed(() => {
+                return detectedItems.value.filter(i => i.selected).reduce((sum, i) => sum + i.price, 0);
+            });
+
+            const confirmItems = () => {
+                const selected = detectedItems.value.filter(i => i.selected);
+                if (selected.length === 0) { alert('請至少選擇一個項目'); return; }
+                
+                // Aggregate names
+                form.itemTw = selected.map(i => i.nameTw).join('、');
+                form.itemOriginal = selected.map(i => i.nameOrg).join(' / ');
+                // Aggregate price
+                form.price = selectionTotal.value;
+                
+                isConfirmedSelection.value = true;
             };
 
             // --- Offline OCR & Translation Logic ---
@@ -506,33 +592,27 @@
             const resetDownloadState = () => { isDownloadingModel.value = false; modelLoading.total = 0; downloadedModels.value = []; localStorage.removeItem('myTravel_downloaded_models'); alert("已重置"); };
 
             const analyzeOffline = async () => {
-                statusText.value = "Tesseract OCR 識別中 (可能需要 10-20 秒)...";
-                
-                // 1. OCR Step
+                statusText.value = "Tesseract OCR 識別中...";
                 const worker = await Tesseract.createWorker(settings.currencyCode === 'JPY' ? 'jpn' : (settings.currencyCode === 'KRW' ? 'kor' : 'eng'));
                 const ret = await worker.recognize(form.image);
                 await worker.terminate();
                 const ocrText = ret.data.text;
-                console.log("OCR Result:", ocrText);
-                
                 if(!ocrText || ocrText.length < 5) throw new Error("OCR 無法識別文字，請重拍。");
 
-                // Simple Extraction Heuristics (Very Basic)
-                // Try to find the longest line as item name
+                // Simple Offline Logic (Single Item Fallback for now as offline parsing is hard)
                 const lines = ocrText.split('\n').filter(l => l.trim().length > 2);
                 let longestLine = lines.sort((a, b) => b.length - a.length)[0] || '';
-                form.itemOriginal = longestLine.substring(0, 30); // Limit length
-
-                // Try to find price (largest number)
+                form.itemOriginal = longestLine.substring(0, 30);
+                
                 const numbers = ocrText.match(/\d+[.,]\d+|\d+/g);
                 if(numbers) {
-                     const prices = numbers.map(n => parseFloat(n.replace(/,/g,''))).filter(n => !isNaN(n));
+                     // Filter out likely dates or small nums
+                     const prices = numbers.map(n => parseFloat(n.replace(/,/g,''))).filter(n => !isNaN(n) && n > 10);
                      if(prices.length > 0) form.price = Math.max(...prices);
                 }
-
-                // 2. Translation Step
+                
                 statusText.value = "離線翻譯中...";
-                await translateItem(); // Reuse manual translate function
+                await translateItem(); 
             };
 
             const translateItem = async () => {
@@ -581,7 +661,7 @@
                         if (w > MAX) { h *= MAX / w; w = MAX; }
                         canvas.width = w; canvas.height = h; ctx.drawImage(img, 0, 0, w, h);
                         form.image = canvas.toDataURL('image/jpeg', 0.8);
-                        if((isAIProvider.value && isKeyConfigured.value) || isOfflineOCR.value) analyzeReceipt();
+                        if(isAIProvider.value && isKeyConfigured.value) analyzeReceipt();
                     };
                 };
                 reader.readAsDataURL(file); e.target.value = '';
@@ -589,7 +669,9 @@
 
             const saveExpense = () => { if (!form.itemTw || !form.price) { alert('請輸入完整資訊'); return; } expenses.value.push({ ...form }); saveAll(); closeModal(); };
             const deleteExpense = (id) => { if(confirm('刪除?')) { expenses.value = expenses.value.filter(i => i.id !== id); saveAll(); } };
-            
+            const triggerCamera = () => fileInput.value.click();
+            const viewImage = (src) => { if(src) viewingImage.value = src; };
+
             const currencyCode = computed(() => settings.currencyCode);
             const totalTWD = computed(() => expenses.value.reduce((sum, item) => sum + Math.round(item.price * settings.rate), 0));
             const groupedExpenses = computed(() => { const g = {}; [...expenses.value].sort((a,b)=>new Date(b.date)-new Date(a.date)).forEach(i => { if(!g[i.date]) g[i.date]=[]; g[i.date].push(i); }); return g; });
@@ -602,7 +684,9 @@
                 showModal, showSettings, viewingImage, fileInput, isAnalyzing, statusText, isTesting, errorModal, isKeyConfigured, isAIProvider, isOfflineOCR, getProviderName,
                 settings, form, currencyCode, groupedExpenses, totalTWD, modelLoading, isDownloadingModel, currentDownloadTarget, downloadedModels,
                 openAddModal, closeModal, triggerCamera, handleImageUpload, analyzeReceipt, translateItem, saveExpense, saveSettings, deleteExpense, viewImage, downloadModel, resetDownloadState,
-                testAPIConnection, formatCurrency, formatDate, getDayLabel, getDayTotal
+                testAPIConnection, formatCurrency, formatDate, getDayLabel, getDayTotal,
+                // New Variables for Multi-Item
+                detectedItems, isConfirmedSelection, selectionTotal, confirmItems
             };
         }
     }).mount('#app');
