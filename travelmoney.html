@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>綺麗旅帳 - Travel Expense V2.3</title>
+    <title>綺麗旅帳 - Travel Expense V2.4</title>
     
     <!-- 核心函式庫 -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -130,7 +130,7 @@
         </div>
     </main>
 
-    <!-- FAB (Updated Position to bottom-32) -->
+    <!-- FAB -->
     <button @click="openAddModal" class="absolute bottom-32 right-6 w-14 h-14 rounded-full btn-pink flex items-center justify-center text-2xl shadow-xl z-20 hover:scale-110 transition-transform">
         <i class="fa-solid fa-camera"></i>
     </button>
@@ -165,7 +165,7 @@
                                 <span class="text-rose-500 font-bold text-sm">{{ statusText }}</span>
                             </div>
                         </div>
-                        <!-- Updated Input: Explicitly removed capture attribute to allow gallery selection -->
+                        <!-- Input -->
                         <input type="file" ref="fileInput" accept="image/*" class="hidden" @change="handleImageUpload">
                     </div>
 
@@ -284,17 +284,9 @@
             const saveSettings = () => { saveAll(); showSettings.value = false; };
             const triggerCamera = () => fileInput.value.click();
 
-            // Improved JSON cleaning function
             const cleanJsonString = (str) => {
-                // Remove Markdown code blocks
-                let cleaned = str.replace(/```json/g, '').replace(/```/g, '');
-                // Find JSON object
-                const firstOpen = cleaned.indexOf('{');
-                const lastClose = cleaned.lastIndexOf('}');
-                if (firstOpen !== -1 && lastClose !== -1) {
-                    cleaned = cleaned.substring(firstOpen, lastClose + 1);
-                }
-                return cleaned;
+                const match = str.match(/\{[\s\S]*\}/);
+                return match ? match[0] : str;
             };
 
             const analyzeReceipt = async () => {
@@ -309,18 +301,19 @@
                     const prompt = `
                         請扮演一個收據辨識專家。請分析這張圖片，並以繁體中文 (Traditional Chinese) 回傳一個純 JSON 物件。
                         
+                        重點：主要提取「金額」與「品項」。若店名或日期沒拍到，請留空字串，不要報錯。
+
                         你需要提取：
-                        1. store: 店家名稱 (原文)。
-                        2. itemOriginal: 最主要的商品名稱 (原文)，如果是多項商品，請選金額最高的。
+                        1. store: 店家名稱 (原文)。若無法辨識請回傳空字串。
+                        2. itemOriginal: 最主要的商品名稱 (原文)。
                         3. itemTw: 將上述商品名稱翻譯成台灣繁體中文 (精簡)。
-                        4. price: 總金額 (純數字，不要符號，不要千分位逗號)。
-                        5. date: 交易日期 (格式 YYYY-MM-DD，若找不到則回傳空字串)。
+                        4. price: 總金額 (純數字，不要符號，移除逗號)。
+                        5. date: 交易日期 (格式 YYYY-MM-DD)。若無法辨識請回傳空字串。
 
                         請務必只回傳 JSON 字串，不要有任何 Markdown 標記或解釋文字。格式如下：
                         {"store": "...", "itemOriginal": "...", "itemTw": "...", "price": 0, "date": "..."}
                     `;
 
-                    // Added safetySettings to prevent blocking
                     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${settings.apiKey}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -350,7 +343,10 @@
                     form.store = result.store || '';
                     form.itemTw = result.itemTw || '';
                     form.itemOriginal = result.itemOriginal || '';
-                    form.price = result.price || '';
+                    if (result.price) {
+                        const priceStr = String(result.price).replace(/,/g, '');
+                        form.price = parseFloat(priceStr) || 0;
+                    }
                     if (result.date) form.date = result.date;
                     
                 } catch (error) {
@@ -392,7 +388,6 @@
             };
 
             const deleteExpense = (id) => { if(confirm('刪除?')) { expenses.value = expenses.value.filter(i => i.id !== id); saveAll(); } };
-            const triggerCamera = () => fileInput.value.click();
             const viewImage = (src) => { if(src) viewingImage.value = src; };
 
             const currencyCode = computed(() => settings.currencyCode);
