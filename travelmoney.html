@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>綺麗旅帳 - Travel Expense V5.2 (離線模型預載版)</title>
+    <title>綺麗旅帳 - Travel Expense V5.4 (輕量模組版)</title>
     
     <!-- 核心函式庫 -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -226,7 +226,7 @@
                                 </button>
                             </div>
                             <div v-if="isDownloadingModel" class="mt-2 text-xs text-violet-600 bg-violet-50 p-2 rounded animate-pulse">
-                                正在自動下載/載入離線翻譯模型... 請稍候。
+                                正在載入語言模型... 請稍候。
                             </div>
                         </div>
 
@@ -320,11 +320,26 @@
                 </div>
                 
                 <div v-if="settings.provider === 'offline_ai'" class="bg-violet-50 p-3 rounded-xl border border-violet-100 animate-fade-in text-xs text-violet-700">
-                    <p class="font-bold mb-2"><i class="fa-solid fa-download mr-1"></i> 實驗性功能 (Transformers.js)</p>
-                    <p class="mb-2">將在瀏覽器下載開源模型 (約 100MB+)，可離線將各國語言翻譯為中文。</p>
+                    <p class="font-bold mb-2"><i class="fa-solid fa-download mr-1"></i> 輕量化離線翻譯 (Opus-MT)</p>
+                    <p class="mb-3">請依需求下載對應的語言模組 (每個約 40~60MB)。</p>
                     
-                    <button @click="downloadModel" class="w-full py-2 bg-violet-600 text-white rounded-lg font-bold hover:bg-violet-700 transition" :disabled="isDownloadingModel">
-                        {{ isDownloadingModel ? '下載中...' : '📥 立即預先下載模型' }}
+                    <div class="space-y-2">
+                        <button @click="downloadModel('ja')" class="w-full flex justify-between items-center px-3 py-2 bg-white rounded-lg border border-violet-200 hover:bg-violet-50 transition" :disabled="isDownloadingModel">
+                            <span>🇯🇵 日文 -> 中文</span>
+                            <span class="text-violet-500 font-bold">{{ isDownloadingModel && currentDownloadTarget === 'ja' ? '下載中...' : '📥 下載' }}</span>
+                        </button>
+                        <button @click="downloadModel('ko')" class="w-full flex justify-between items-center px-3 py-2 bg-white rounded-lg border border-violet-200 hover:bg-violet-50 transition" :disabled="isDownloadingModel">
+                            <span>🇰🇷 韓文 -> 中文</span>
+                            <span class="text-violet-500 font-bold">{{ isDownloadingModel && currentDownloadTarget === 'ko' ? '下載中...' : '📥 下載' }}</span>
+                        </button>
+                        <button @click="downloadModel('en')" class="w-full flex justify-between items-center px-3 py-2 bg-white rounded-lg border border-violet-200 hover:bg-violet-50 transition" :disabled="isDownloadingModel">
+                            <span>🇺🇸 英文 -> 中文</span>
+                            <span class="text-violet-500 font-bold">{{ isDownloadingModel && currentDownloadTarget === 'en' ? '下載中...' : '📥 下載' }}</span>
+                        </button>
+                    </div>
+
+                     <button @click="resetDownloadState" class="w-full mt-3 px-3 py-2 bg-white border border-red-200 text-red-500 rounded-lg font-bold hover:bg-red-50 text-center" title="若卡住請按此重置">
+                        <i class="fa-solid fa-rotate-right mr-1"></i> 重置下載狀態
                     </button>
                     
                     <!-- Progress Bar in Settings -->
@@ -342,9 +357,7 @@
                 <div>
                     <label class="text-xs font-bold text-gray-500 mb-1 block">當地貨幣</label>
                     <select v-model="settings.currencyCode" class="input-elegant bg-white">
-                        <option value="JPY">JPY (日圓)</option><option value="KRW">KRW (韓元)</option>
-                        <option value="USD">USD (美金)</option><option value="EUR">EUR (歐元)</option>
-                        <option value="THB">THB (泰銖)</option><option value="CNY">CNY (人民幣)</option>
+                        <option value="JPY">JPY (日圓)</option><option value="KRW">KRW (韓元)</option><option value="USD">USD (美金)</option><option value="EUR">EUR (歐元)</option><option value="THB">THB (泰銖)</option><option value="CNY">CNY (人民幣)</option>
                     </select>
                 </div>
                 <div><label class="text-xs font-bold text-gray-500 mb-1 block">匯率 (1 當地幣 = ? 台幣)</label><input type="number" v-model.number="settings.rate" step="0.0001" class="input-elegant font-bold text-rose-500"></div>
@@ -384,21 +397,24 @@
 
     // Singleton for translation pipeline
     class TranslationService {
-        static instance = null;
+        static instances = {}; // Store by lang: 'ja', 'ko', 'en'
 
-        static async getInstance(progressCallback) {
-            if (this.instance === null) {
-                // Using a multilingual model that supports Chinese
-                // 'Xenova/nllb-200-distilled-600M' is powerful but large.
-                this.instance = await pipeline('translation', 'Xenova/nllb-200-distilled-600M', {
+        static async getInstance(lang, progressCallback) {
+            if (!this.instances[lang]) {
+                // Map lang to model
+                let modelID = 'Xenova/opus-mt-en-zh'; // Default fallback
+                if (lang === 'ja') modelID = 'Xenova/opus-mt-ja-zh';
+                if (lang === 'ko') modelID = 'Xenova/opus-mt-ko-zh'; // Assuming availability, or use fallback
+                if (lang === 'en') modelID = 'Xenova/opus-mt-en-zh';
+
+                this.instances[lang] = await pipeline('translation', modelID, {
                     progress_callback: progressCallback
                 });
             }
-            return this.instance;
+            return this.instances[lang];
         }
     }
 
-    // Expose to window for Vue to use (since this is a module script)
     window.TranslationService = TranslationService;
 </script>
 
@@ -428,17 +444,16 @@
             const isAnalyzing = ref(false);
             const isTesting = ref(false);
             const isDownloadingModel = ref(false);
+            const currentDownloadTarget = ref('');
             const statusText = ref('');
             
-            // For offline model progress
             const modelLoading = reactive({ loaded: 0, total: 0, text: '' });
-            
             const errorModal = reactive({ show: false, message: '' });
 
             const settings = reactive({
                 rate: 0.2150,
                 currencyCode: 'JPY',
-                provider: 'gemini', // 'gemini', 'openai', 'dictionary', 'google_trans', 'offline_ai'
+                provider: 'gemini', 
                 geminiKey: '',
                 openaiKey: '',
                 geminiModel: 'gemini-1.5-flash',
@@ -446,7 +461,6 @@
             });
 
             const expenses = ref([]);
-            
             const form = reactive({ id: null, date: '', store: '', itemTw: '', itemOriginal: '', price: '', tax: 'inc', image: null });
 
             onMounted(() => {
@@ -472,7 +486,7 @@
                     date: new Date().toISOString().split('T')[0],
                     store: '', itemTw: '', itemOriginal: '', price: '', tax: 'inc', image: null
                 });
-                modelLoading.total = 0; // reset progress bar
+                modelLoading.total = 0;
             };
 
             const openAddModal = () => { resetForm(); showModal.value = true; };
@@ -512,7 +526,6 @@
                 If field not found, use empty string/0.
             `;
 
-            // ... (API calls: callGemini, callOpenAI, testAPIConnection, analyzeReceipt) ...
             const callGemini = async (base64Image) => {
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${settings.geminiModel}:generateContent?key=${settings.geminiKey}`;
                 const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: getPrompt() }, { inline_data: { mime_type: "image/jpeg", data: base64Image } }] }], safetySettings: [{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }] }) });
@@ -520,6 +533,7 @@
                 if (data.error) throw new Error(data.error.message);
                 return data.candidates[0].content.parts[0].text;
             };
+
             const callOpenAI = async (base64Image) => {
                 const url = 'https://api.openai.com/v1/chat/completions';
                 const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.openaiKey}` }, body: JSON.stringify({ model: settings.openaiModel, messages: [ { role: "system", content: "You are a helpful assistant that outputs JSON." }, { role: "user", content: [ { type: "text", text: getPrompt() }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Image}` } } ] } ], response_format: { type: "json_object" } }) });
@@ -527,6 +541,7 @@
                 if (data.error) throw new Error(data.error.message);
                 return data.choices[0].message.content;
             };
+
             const testAPIConnection = async () => {
                 const isGemini = settings.provider === 'gemini';
                 const key = isGemini ? settings.geminiKey : settings.openaiKey;
@@ -538,6 +553,7 @@
                     alert(`✅ ${isGemini?'Gemini':'OpenAI'} 連線成功！`);
                 } catch (e) { alert("❌ 連線失敗：" + e.message); } finally { isTesting.value = false; }
             };
+
             const analyzeReceipt = async () => {
                 if (!isKeyConfigured.value) { errorModal.message = "未設定對應的 API Key。"; errorModal.show = true; return; }
                 if (!form.image) return;
@@ -554,12 +570,13 @@
             };
             
             // --- Offline Translation Logic ---
-            const downloadModel = async () => {
+            const downloadModel = async (lang) => {
                 if(!window.TranslationService) { alert("瀏覽器不支援模組載入，請檢查網路"); return; }
                 isDownloadingModel.value = true;
+                currentDownloadTarget.value = lang;
                 modelLoading.total = 100; modelLoading.loaded = 5; modelLoading.text = '初始化中...';
                 try {
-                    await window.TranslationService.getInstance((progress) => {
+                    await window.TranslationService.getInstance(lang, (progress) => {
                         if(progress.status === 'progress' && progress.total) {
                             modelLoading.text = `下載中... ${progress.file}`;
                             modelLoading.loaded = progress.loaded;
@@ -571,8 +588,18 @@
                     alert("下載失敗: " + e.message);
                 } finally {
                     isDownloadingModel.value = false;
+                    currentDownloadTarget.value = '';
                     modelLoading.total = 0;
                 }
+            };
+            
+            const resetDownloadState = () => {
+                isDownloadingModel.value = false;
+                modelLoading.total = 0;
+                modelLoading.loaded = 0;
+                modelLoading.text = '';
+                currentDownloadTarget.value = '';
+                alert("已重置下載狀態，請重新嘗試。");
             };
 
             const translateItem = async () => {
@@ -591,14 +618,15 @@
                     
                     try {
                         modelLoading.text = "模型準備中...";
-                        modelLoading.total = 100; modelLoading.loaded = 1; // Show bar
+                        modelLoading.total = 100; modelLoading.loaded = 1; 
                         
-                        let src_lang = 'eng_Latn';
-                        if(settings.currencyCode === 'JPY') src_lang = 'jpn_Jpan';
-                        if(settings.currencyCode === 'KRW') src_lang = 'kor_Hang';
-                        const tgt_lang = 'zho_Hant';
+                        let targetLang = 'en'; // default fallback
+                        if(settings.currencyCode === 'JPY') targetLang = 'ja';
+                        if(settings.currencyCode === 'KRW') targetLang = 'ko';
 
-                        const translator = await window.TranslationService.getInstance((progress) => {
+                        // Check if we have a model for this
+                        // (User must have downloaded it first via Settings, or it will download now)
+                        const translator = await window.TranslationService.getInstance(targetLang, (progress) => {
                             if(progress.status === 'progress' && progress.total) {
                                 modelLoading.text = `載入中: ${progress.file}`;
                                 modelLoading.loaded = progress.loaded;
@@ -607,10 +635,7 @@
                         });
 
                         modelLoading.text = "正在翻譯...";
-                        const output = await translator(original, {
-                            src_lang: src_lang,
-                            tgt_lang: tgt_lang
-                        });
+                        const output = await translator(original);
                         
                         if(output && output[0]) {
                             form.itemTw = output[0].translation_text;
@@ -674,8 +699,8 @@
 
             return {
                 showModal, showSettings, viewingImage, fileInput, isAnalyzing, statusText, isTesting, errorModal, isKeyConfigured, isAIProvider, getProviderName,
-                settings, form, currencyCode, groupedExpenses, totalTWD, modelLoading, isDownloadingModel,
-                openAddModal, closeModal, triggerCamera, handleImageUpload, analyzeReceipt, translateItem, saveExpense, saveSettings, deleteExpense, viewImage, downloadModel,
+                settings, form, currencyCode, groupedExpenses, totalTWD, modelLoading, isDownloadingModel, currentDownloadTarget,
+                openAddModal, closeModal, triggerCamera, handleImageUpload, analyzeReceipt, translateItem, saveExpense, saveSettings, deleteExpense, viewImage, downloadModel, resetDownloadState,
                 testAPIConnection, formatCurrency, formatDate, getDayLabel, getDayTotal
             };
         }
